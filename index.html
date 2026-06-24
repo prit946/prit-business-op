@@ -1196,6 +1196,7 @@ function rAdminPanel(){
       <button class="edit-btn" onclick="cleanupDuplicates()">🧹 Remove Duplicate Businesses</button>
       <button class="edit-btn" onclick="exportAllData()">📤 Export All Data</button>
       <button class="edit-btn" onclick="viewPayrollAllBiz()">💵 All Payroll Records</button>
+      <button class="edit-btn" onclick="exportPINSheet()">🔑 Copy PIN Sheet</button>
     </div>
     <div class="divider"></div>
     <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:8px">DANGER ZONE</div>
@@ -1985,6 +1986,29 @@ window.openOpenShiftModal=function(){
 window.openLogModal=function(){
   document.getElementById('log-biz').innerHTML=businesses.map(b=>`<option value="${b.id}">${b.name}</option>`).join('');
   openModal('modal-log');
+};
+
+window.exportPINSheet=function(){
+  let txt='PRIT BUSINESS OP — EMPLOYEE PINs\n';
+  txt+='Generated: '+new Date().toLocaleString()+'\n';
+  txt+='Keep this confidential.\n';
+  txt+='══════════════════════════════════\n\n';
+  businesses.forEach(biz=>{
+    const bizEmps=employees.filter(e=>e.bizId===biz.id&&e.status!=='inactive');
+    if(!bizEmps.length)return;
+    txt+=`📦 ${biz.name}\n`;
+    txt+='──────────────────────────────────\n';
+    bizEmps.forEach(e=>{
+      txt+=`${(e.first+' '+e.last).padEnd(22)} PIN: ${e.pin||'Not set'}\n`;
+    });
+    txt+='\n';
+  });
+  txt+='══════════════════════════════════\n';
+  txt+='Add each PIN to the employee note in their Homebase contact card.\n';
+  txt+='Format: "Prit Business Op PIN: XXXX"';
+  navigator.clipboard.writeText(txt)
+    .then(()=>alert('✅ PIN sheet copied!\n\nPaste into notes or your password manager.\n\nFor each employee in Homebase:\nTeam → [Name] → Notes → paste their PIN line.'))
+    .catch(()=>prompt('Copy this PIN sheet:',txt));
 };
 
 window.render=render;
