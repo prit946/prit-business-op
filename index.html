@@ -405,9 +405,21 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   <div class="modal">
     <div class="modal-title" id="avail-title">Availability</div>
     <input type="hidden" id="avail-emp-id">
-    <p style="font-size:12px;color:var(--text2);margin-bottom:14px">Tap days to toggle available. Set preferred hours per day.</p>
-    <div class="avail-grid" id="avail-days"></div>
-    <div id="avail-times" style="margin-top:14px"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+      <button class="week-btn" onclick="availPrevMonth()">← Prev</button>
+      <span id="avail-month-label" style="font-weight:700;font-size:14px"></span>
+      <button class="week-btn" onclick="availNextMonth()">Next →</button>
+    </div>
+    <p style="font-size:11px;color:var(--text2);margin-bottom:10px">Tap dates to mark available (green) or unavailable. Set default hours below.</p>
+    <div id="avail-cal" style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:14px"></div>
+    <div style="display:flex;gap:10px;margin-bottom:14px">
+      <div class="field" style="flex:1;margin-bottom:0"><label>Default Start</label><input type="time" id="avail-def-start" value="08:00"></div>
+      <div class="field" style="flex:1;margin-bottom:0"><label>Default End</label><input type="time" id="avail-def-end" value="19:30"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      <button class="edit-btn" onclick="markAllMonth(true)">✅ Mark All Available</button>
+      <button class="edit-btn" onclick="markAllMonth(false)">❌ Mark All Unavailable</button>
+    </div>
     <div class="modal-actions">
       <button class="btn-sm btn-outline" style="flex:1" onclick="closeModal('modal-avail')">Cancel</button>
       <button class="btn-sm btn-primary btn" style="flex:2;width:auto;padding:9px 18px" onclick="saveAvail()">Save</button>
@@ -766,7 +778,10 @@ function rSchedule(){
   const schedEmps=employees.filter(e=>e.bizId===schedBiz&&e.status!=='inactive');
   const laborCost=calcLaborCost(schedEmps,dates);
   return`<div class="section-header"><div class="section-title">Schedule</div>
+    <div style="display:flex;gap:8px">
+    <button class="add-btn" style="background:var(--surface2);color:var(--text);border:1px solid var(--border)" onclick="copyScheduleAsText('${schedBiz}')">📋 Copy</button>
     <button class="add-btn" onclick="publishSchedule('${schedBiz}')">📢 Publish</button>
+  </div>
   </div>
   <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
     <select onchange="setBizFilter(this.value)" style="max-width:220px">${bizOpts}</select>
@@ -851,6 +866,49 @@ window.clearShift=async function(){
   closeModal('modal-shift');render();
 };
 
+window.copyScheduleAsText=function(bizId){
+  const biz=businesses.find(b=>b.id===bizId);
+  const dates=getWeekDates(weekOffset);
+  const wl=`Week of ${dates[0].toLocaleDateString('en-US',{month:'short',day:'numeric'})} – ${dates[6].toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}`;
+  const schedEmps=employees.filter(e=>e.bizId===bizId&&e.status!=='inactive');
+  const dayNames=dates.map(d=>DAYS_SHORT[d.getDay()]+' '+d.getDate());
+  // Build table
+  const col=12;
+  const pad=(s,n)=>String(s).padEnd(n).slice(0,n);
+  let txt=`${biz?biz.name:''} — Schedule
+${wl}
+`;
+  txt+='─'.repeat(90)+'
+';
+  txt+=pad('Employee',16)+dayNames.map(d=>pad(d,11)).join('')+'
+';
+  txt+='─'.repeat(90)+'
+';
+  schedEmps.forEach(e=>{
+    const name=`${e.first} ${e.last}`;
+    let amLine=pad(name+' AM',16);
+    let pmLine=pad('',16);
+    dates.forEach(d=>{
+      const ds=d.toISOString().split('T')[0];
+      const am=window._shifts[`${e.id}_${ds}_am`];
+      const pm=window._shifts[`${e.id}_${ds}_pm`];
+      amLine+=pad(am?`${fmt12(am.s)}-${fmt12(am.e)}`:'—',11);
+      pmLine+=pad(pm?`${fmt12(pm.s)}-${fmt12(pm.e)}`:'—',11);
+    });
+    txt+=amLine+'
+'+pmLine+'
+';
+  });
+  txt+='─'.repeat(90)+'
+';
+  navigator.clipboard.writeText(txt).then(()=>alert('✅ Schedule copied to clipboard!
+
+Paste it into any group chat or text message.')).catch(()=>{
+    // Fallback: show in prompt
+    prompt('Copy this schedule:',txt);
+  });
+};
+
 window.publishSchedule=async function(bizId){
   const biz=businesses.find(b=>b.id===bizId);
   const dates=getWeekDates(weekOffset);
@@ -865,11 +923,20 @@ window.publishSchedule=async function(bizId){
 function rPayroll(){
   const opts=`<option value="all">All Businesses</option>`+businesses.map(b=>`<option value="${b.id}" ${bizFilter===b.id?'selected':''}>${b.name}</option>`).join('');
   const emps=(bizFilter==='all'?employees:employees.filter(e=>e.bizId===bizFilter)).filter(e=>e.status!=='inactive');
+  const today=new Date(),ago=new Date(today);ago.setDate(today.getDate()-14);
+  const defEnd=today.toISOString().split('T')[0],defStart=ago.toISOString().split('T')[0];
   return`<div class="section-header"><div class="section-title">Payroll</div></div>
   <div style="margin-bottom:14px"><select onchange="setBizFilter(this.value)" style="max-width:280px">${opts}</select></div>
+  <div class="card" style="margin-bottom:12px">
+    <div style="font-weight:700;margin-bottom:10px">Pay Period</div>
+    <div class="form-row">
+      <div class="field"><label>Period Start</label><input type="date" id="pay-start" value="${defStart}"></div>
+      <div class="field"><label>Period End</label><input type="date" id="pay-end" value="${defEnd}"></div>
+    </div>
+  </div>
   <div class="card">
-    <div style="font-weight:700;margin-bottom:4px">Pay Period Calculator</div>
-    <p style="font-size:12px;color:var(--text2);margin-bottom:14px">Enter hours per employee. Overtime auto-applies at 40hrs (1.5x).</p>
+    <div style="font-weight:700;margin-bottom:4px">Hours & Pay</div>
+    <p style="font-size:12px;color:var(--text2);margin-bottom:14px">Enter hours per employee. Overtime at 40hrs = 1.5x rate.</p>
     <table style="width:100%;border-collapse:collapse">
       <thead><tr style="font-size:11px;color:var(--text2)"><th style="text-align:left;padding:8px 0;font-weight:600">Employee</th><th style="text-align:center;font-weight:600">Rate</th><th style="text-align:center;font-weight:600">Hours</th><th style="text-align:right;font-weight:600">Gross</th></tr></thead>
       <tbody>${emps.length===0?'<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--text2)">No active employees</td></tr>':
@@ -882,14 +949,18 @@ function rPayroll(){
       </tbody>
     </table>
     <div class="divider"></div>
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
       <span style="font-weight:700">Total Labor</span>
       <span style="font-size:20px;font-weight:800;color:var(--success)" id="total-pay">$0.00</span>
     </div>
-    <button class="btn-sm btn-outline" onclick="exportPayroll()">📋 Copy Summary</button>
-  </div>`;
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn-sm btn-success" onclick="savePayrollPeriod()">💾 Save Period</button>
+      <button class="btn-sm btn-outline" onclick="exportPayroll()">📋 Copy for CPA</button>
+      <button class="btn-sm btn-outline" onclick="viewPayrollHistory()">📁 History</button>
+    </div>
+  </div>
+  <div id="payroll-history"></div>`;
 }
-
 window.calcPay=function(id,rate){
   const hrs=parseFloat(document.getElementById('hrs-'+id).value)||0;
   const r=parseFloat(rate)||0;
@@ -916,9 +987,16 @@ window.exportPayroll=function(){
 
 // ── EXPENSES ──
 function rExpenses(){
-  const opts=`<option value="all">All Businesses</option>`+businesses.map(b=>`<option value="${b.id}">${b.name}</option>`).join('');
+  const now=new Date();
+  const bizOpts=`<option value="all">All Businesses</option>`+businesses.map(b=>`<option value="${b.id}">${b.name}</option>`).join('');
+  const years=[...new Set([now.getFullYear(), now.getFullYear()-1])].map(y=>`<option value="${y}">${y}</option>`).join('');
+  const months=['All Months','January','February','March','April','May','June','July','August','September','October','November','December'].map((m,i)=>`<option value="${i===0?'all':i}">${m}</option>`).join('');
   return`<div class="section-header"><div class="section-title">Expenses</div><button class="add-btn" onclick="openExpModal()">+ Log</button></div>
-  <div style="margin-bottom:14px"><select onchange="setExpFilter(this.value)" id="exp-f" style="max-width:280px">${opts}</select></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+    <select onchange="setExpFilter(this.value)" style="flex:2;min-width:140px">${bizOpts}</select>
+    <select id="exp-year" onchange="loadExpList()" style="flex:1;min-width:80px"><option value="all">All Years</option>${years}</select>
+    <select id="exp-month" onchange="loadExpList()" style="flex:1;min-width:100px">${months}</select>
+  </div>
   <div id="exp-list"><div class="loader">Loading...</div></div>`;
 }
 
@@ -938,6 +1016,10 @@ async function loadExpList(){
   const snap=await getDocs(query(collection(db,'expenses'),orderBy('date','desc')));
   let exps=snap.docs.map(d=>({id:d.id,...d.data()}));
   if(expFilter!=='all')exps=exps.filter(e=>e.bizId===expFilter);
+  const yr=document.getElementById('exp-year')?.value||'all';
+  const mo=document.getElementById('exp-month')?.value||'all';
+  if(yr!=='all')exps=exps.filter(e=>e.date&&e.date.startsWith(yr));
+  if(mo!=='all')exps=exps.filter(e=>e.date&&parseInt(e.date.split('-')[1])===parseInt(mo));
   const total=exps.reduce((s,e)=>s+(e.amount||0),0);
   list.innerHTML=exps.length===0?'<div class="empty"><div class="empty-icon">💰</div><p>No expenses yet</p></div>':
   `<div class="card" style="margin-bottom:12px"><div style="display:flex;justify-content:space-between"><span style="color:var(--text2);font-size:13px">${exps.length} expenses</span><span style="font-size:20px;font-weight:800;color:var(--danger)">-$${total.toFixed(2)}</span></div></div>`+
@@ -965,20 +1047,29 @@ async function loadTOList(){
   const list=document.getElementById('to-list');if(!list)return;
   const snap=await getDocs(query(collection(db,'timeoff'),orderBy('createdAt','desc')));
   if(snap.empty){list.innerHTML='<div class="empty"><div class="empty-icon">📅</div><p>No requests</p></div>';return;}
-  list.innerHTML=snap.docs.map(d=>{
-    const r={id:d.id,...d.data()};const emp=employees.find(e=>e.id===r.empId);
+  const all=snap.docs.map(d=>({id:d.id,...d.data()}));
+  const pending=all.filter(r=>r.status==='pending');
+  const approved=all.filter(r=>r.status==='approved');
+  function toRow(r,showActions){
+    const emp=employees.find(e=>e.id===r.empId);
     const name=emp?`${emp.first} ${emp.last}`:r.empName||'Unknown';
     const ok=r.from&&(new Date(r.from+'T12:00:00')-new Date()>=1209600000);
     return`<div class="request-row">
-      <div style="flex:1"><div style="font-weight:600;font-size:14px">${name}</div>
-      <div style="font-size:12px;color:var(--text2);margin-top:2px">${fmtD(r.from)} → ${fmtD(r.to)}${r.reason?' · '+r.reason:''}</div>
-      ${!ok?'<span class="badge badge-yellow" style="margin-top:4px">⚠️ Less than 2 weeks notice</span>':''}</div>
-      <div style="display:flex;gap:6px">
-        <button class="action-btn approve-btn" onclick="approveTO('${r.id}')">✓</button>
-        <button class="action-btn deny-btn" onclick="denyTO('${r.id}')">✗</button>
+      <div style="flex:1">
+        <div style="font-weight:600;font-size:14px">${name}</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:2px">${fmtD(r.from)} → ${fmtD(r.to)}${r.reason?' · '+r.reason:''}</div>
+        ${!ok&&r.status==='pending'?'<span class="badge badge-yellow" style="margin-top:4px">⚠️ Less than 2 weeks notice</span>':''}
+        <span class="badge ${r.status==='approved'?'badge-green':'badge-yellow'}" style="margin-top:4px">${r.status}</span>
       </div>
+      ${showActions?`<div style="display:flex;gap:6px">
+        <button class="action-btn approve-btn" onclick="approveTO('${r.id}')">✓ Approve</button>
+        <button class="action-btn deny-btn" onclick="denyTO('${r.id}')">✗ Deny</button>
+      </div>`:'<button class="action-btn deny-btn" onclick="denyTO(''+r.id+'')">Remove</button>'}
     </div>`;
-  }).join('');
+  }
+  list.innerHTML=
+    (pending.length?`<div style="font-weight:700;font-size:13px;margin-bottom:8px;color:var(--warning)">⏳ Pending (${pending.length})</div>`+pending.map(r=>toRow(r,true)).join(''):'<div style="color:var(--text2);font-size:13px;margin-bottom:12px">No pending requests ✅</div>')+
+    (approved.length?`<div style="font-weight:700;font-size:13px;margin-top:14px;margin-bottom:8px;color:var(--success)">✅ Approved (${approved.length})</div>`+approved.map(r=>toRow(r,false)).join(''):'');
 }
 window.openTOModal=function(empId){
   document.getElementById('to-biz').innerHTML=businesses.map(b=>`<option value="${b.id}">${b.name}</option>`).join('');
@@ -1004,7 +1095,16 @@ window.saveTO=async function(){
   await addDoc(collection(db,'timeoff'),{empId,empName:emp?`${emp.first} ${emp.last}`:'',from,to,reason:document.getElementById('to-reason').value,status:'pending',createdAt:serverTimestamp()});
   closeModal('modal-to');if(currentTab==='timeoff')loadTOList();
 };
-window.approveTO=async function(id){await updateDoc(doc(db,'timeoff',id),{status:'approved'});loadTOList();};
+window.approveTO=async function(id){
+  try{
+    await updateDoc(doc(db,'timeoff',id),{status:'approved'});
+    alert('✅ Request approved.');
+    loadTOList();
+  }catch(err){
+    alert('Error approving: '+err.message);
+    console.error(err);
+  }
+};
 window.denyTO=function(id){confirm2('Deny Request','Remove this request?',async()=>{await deleteDoc(doc(db,'timeoff',id));loadTOList();});};
 
 // ── CHAT ──
@@ -1087,17 +1187,16 @@ function rAdminPanel(){
   </div>
 
   <div class="admin-section">
-    <div class="admin-section-title">🧹 Database Tools</div>
-    <div style="display:flex;gap:10px;flex-wrap:wrap">
-      <button class="add-btn" onclick="cleanupDuplicates()">🧹 Remove Duplicate Businesses</button>
-      <button class="btn-sm btn-danger" onclick="nukeAndReseed()">🔄 Reset & Reseed (3 clean businesses)</button>
+    <div class="admin-section-title">🛠️ System Tools</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="edit-btn" onclick="cleanupDuplicates()">🧹 Remove Duplicate Businesses</button>
+      <button class="edit-btn" onclick="exportAllData()">📤 Export All Data</button>
+      <button class="edit-btn" onclick="viewPayrollAllBiz()">💵 All Payroll Records</button>
     </div>
-    <p style="font-size:11px;color:var(--text3);margin-top:8px">Use "Remove Duplicates" first. Use "Reset & Reseed" only if you want to start completely fresh.</p>
-    <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
-      <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:8px">TESTING TOOLS</div>
-      <button class="edit-btn" onclick="seedTestData()">🧪 Seed Test Employees &amp; Data</button>
-      <p style="font-size:11px;color:var(--text3);margin-top:6px">Adds Summer, Amy &amp; Jenna to UPS Store with shifts, expense &amp; time off. Run after Reset &amp; Reseed.</p>
-    </div>
+    <div class="divider"></div>
+    <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:8px">DANGER ZONE</div>
+    <button class="btn-sm btn-danger" onclick="nukeAndReseed()" style="font-size:12px">🔄 Reset & Reseed Businesses</button>
+    <p style="font-size:11px;color:var(--text3);margin-top:6px">Resets to 3 clean businesses only. Does not delete employees.</p>
   </div>
 
   <div class="admin-section">
@@ -1156,83 +1255,99 @@ window.openDocsModal=async function(empId,name){
   document.getElementById('docs-emp-id').value=empId;
   const snap=await getDoc(doc(db,'docs',empId));
   const d=snap.exists()?snap.data():{};
+  const driveBase='https://drive.google.com/drive/folders/';
   document.getElementById('docs-list').innerHTML=DOC_TYPES.map(dt=>{
     const key=dt.replace(/[\s-]/g,'_');
     const status=d[key]||'pending';
-    return`<div class="doc-row">
-      <div class="doc-name">${dt}</div>
-      <select id="doc-${key}" style="width:130px">
-        <option value="collected" ${status==='collected'?'selected':''}>✅ Collected</option>
-        <option value="pending" ${status==='pending'?'selected':''}>⏳ Pending</option>
-        <option value="missing" ${status==='missing'?'selected':''}>❌ Missing</option>
-      </select>
+    const link=d[key+'_link']||'';
+    return`<div class="doc-row" style="flex-direction:column;align-items:flex-start;gap:6px">
+      <div style="display:flex;align-items:center;justify-content:space-between;width:100%">
+        <div class="doc-name">${dt}</div>
+        <select id="doc-${key}" style="width:130px">
+          <option value="collected" ${status==='collected'?'selected':''}>✅ Collected</option>
+          <option value="pending" ${status==='pending'?'selected':''}>⏳ Pending</option>
+          <option value="missing" ${status==='missing'?'selected':''}>❌ Missing</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:6px;width:100%">
+        <input type="text" id="doc-${key}-link" value="${link}" placeholder="Paste Google Drive link..." style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:7px 10px;color:var(--text);font-size:12px;outline:none">
+        ${link?`<a href="${link}" target="_blank" class="edit-btn" style="text-decoration:none">Open</a>`:''}
+      </div>
     </div>`;
-  }).join('')+`<div style="margin-top:12px"><label style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase">Notes / File Location</label><input type="text" id="doc-notes" value="${d.notes||''}" placeholder="e.g. Google Drive / Filing Cabinet" style="width:100%;margin-top:6px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;outline:none"></div>`;
+  }).join('')+`<div class="divider"></div>
+  <div style="background:var(--surface2);border-radius:10px;padding:12px;font-size:12px;color:var(--text2)">
+    📁 <b>Recommended folder structure:</b><br>
+    My Drive → Prit Business Op → [Business Name] → Employee Records → [Employee Name]<br><br>
+    Upload the document to Drive, right-click → Copy link → paste above.
+  </div>
+  <div style="margin-top:12px"><label style="font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase">General Notes</label><input type="text" id="doc-notes" value="${d.notes||''}" placeholder="Filing cabinet location, HR folder, etc." style="width:100%;margin-top:6px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px;color:var(--text);font-size:13px;outline:none"></div>`;
   openModal('modal-docs');
 };
 window.saveDocs=async function(){
   const empId=document.getElementById('docs-emp-id').value;
-  const data={notes:document.getElementById('doc-notes').value};
-  DOC_TYPES.forEach(dt=>{const key=dt.replace(/[\s-]/g,'_');data[key]=document.getElementById('doc-'+key).value;});
+  const data={notes:document.getElementById('doc-notes')?.value||''};
+  DOC_TYPES.forEach(dt=>{
+    const key=dt.replace(/[\s-]/g,'_');
+    data[key]=document.getElementById('doc-'+key)?.value||'pending';
+    data[key+'_link']=document.getElementById('doc-'+key+'-link')?.value||'';
+  });
   await setDoc(doc(db,'docs',empId),{...data,updatedAt:serverTimestamp()});
   closeModal('modal-docs');alert('Documents saved.');
 };
 
 // ── AVAILABILITY ──
-let availState={};
+let availState={},availYear=new Date().getFullYear(),availMonth=new Date().getMonth();
 window.openAvailModal=async function(empId,name){
   document.getElementById('avail-title').textContent=`${name} — Availability`;
   document.getElementById('avail-emp-id').value=empId;
+  availYear=new Date().getFullYear();availMonth=new Date().getMonth();
   const snap=await getDoc(doc(db,'availability',empId));
   availState=snap.exists()?snap.data():{};
-  renderAvailDays();
+  renderAvailCal();
   openModal('modal-avail');
 };
-function renderAvailDays(){
-  const grid=document.getElementById('avail-days');
-  const availOrder=['mon','tue','wed','thu','fri','sat','sun'];
-  grid.innerHTML=availOrder.map(dk=>{
-    const a=availState[dk];const on=a&&a.on!==false;
-    return`<div class="avail-day ${on?'on':'off'}" onclick="toggleAvailDay('${dk}')">
-      <div class="avail-day-label">${dk.slice(0,2).toUpperCase()}</div>
-      <div class="avail-day-icon">${on?'✅':'❌'}</div>
-    </div>`;
-  }).join('');
-  document.getElementById('avail-times').innerHTML=availOrder.filter(dk=>availState[dk]&&availState[dk].on!==false).map(dk=>{
-    const a=availState[dk]||{};
-    return`<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-      <span style="width:36px;font-size:12px;font-weight:600;color:var(--text2)">${dk.charAt(0).toUpperCase()+dk.slice(1)}</span>
-      <input type="time" id="av-${dk}-s" value="${a.start||'08:00'}" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:7px;color:var(--text);font-size:13px;outline:none">
-      <span style="color:var(--text3)">–</span>
-      <input type="time" id="av-${dk}-e" value="${a.end||'17:00'}" style="flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:7px;color:var(--text);font-size:13px;outline:none">
-    </div>`;
-  }).join('');
+function renderAvailCal(){
+  const cal=document.getElementById('avail-cal');if(!cal)return;
+  const lbl=document.getElementById('avail-month-label')||document.getElementById('my-avail-label');
+  const d=new Date(availYear,availMonth,1);
+  if(lbl)lbl.textContent=d.toLocaleString('en-US',{month:'long',year:'numeric'});
+  const daysInMonth=new Date(availYear,availMonth+1,0).getDate();
+  let firstDay=new Date(availYear,availMonth,1).getDay();
+  firstDay=firstDay===0?6:firstDay-1;
+  const dayHdrs=['M','T','W','T','F','S','S'];
+  let cells=dayHdrs.map(d2=>`<div style="text-align:center;font-size:10px;font-weight:700;color:var(--text3);padding:2px">${d2}</div>`).join('');
+  for(let i=0;i<firstDay;i++)cells+=`<div></div>`;
+  for(let day=1;day<=daysInMonth;day++){
+    const key=`${availYear}-${String(availMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const state=availState[key];
+    const on=state===true;const off=state===false;
+    cells+=`<div onclick="toggleAvailDate('${key}')" style="text-align:center;padding:6px 2px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;background:${on?'#22c55e33':off?'#ef444422':'var(--surface2)'};color:${on?'var(--success)':off?'var(--danger)':'var(--text3)'};">${day}</div>`;
+  }
+  cal.innerHTML=cells;
 }
-window.toggleAvailDay=function(dk){
-  if(!availState[dk])availState[dk]={on:true,start:'08:00',end:'17:00'};
-  else availState[dk].on=!availState[dk].on;
-  renderAvailDays();
+window.toggleAvailDate=function(key){
+  if(availState[key]===true)availState[key]=false;
+  else if(availState[key]===false)delete availState[key];
+  else availState[key]=true;
+  renderAvailCal();
+};
+window.availPrevMonth=function(){availMonth--;if(availMonth<0){availMonth=11;availYear--;}renderAvailCal();};
+window.availNextMonth=function(){availMonth++;if(availMonth>11){availMonth=0;availYear++;}renderAvailCal();};
+window.markAllMonth=function(avail){
+  const dim=new Date(availYear,availMonth+1,0).getDate();
+  for(let day=1;day<=dim;day++){
+    const key=`${availYear}-${String(availMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    availState[key]=avail;
+  }
+  renderAvailCal();
 };
 window.saveAvail=async function(){
   const empId=document.getElementById('avail-emp-id').value;
-  DAYS_KEY.forEach(dk=>{
-    if(availState[dk]&&availState[dk].on!==false){
-      const s=document.getElementById('av-'+dk+'-s');
-      const e=document.getElementById('av-'+dk+'-e');
-      if(s&&e){availState[dk].start=s.value;availState[dk].end=e.value;}
-    }
-  });
   await setDoc(doc(db,'availability',empId),{...availState,updatedAt:serverTimestamp()});
   closeModal('modal-avail');alert('Availability saved.');
 };
+window.toggleAvailDay=function(dk){};
 
-// ── PIN MANAGEMENT ──
-window.openPinModal=function(empId,name){
-  document.getElementById('pin-modal-title').textContent=`Reset PIN — ${name}`;
-  document.getElementById('pin-emp-id').value=empId;
-  document.getElementById('new-pin').value='';
-  openModal('modal-pin');
-};
 window.saveNewPin=async function(){
   const empId=document.getElementById('pin-emp-id').value;
   const pin=document.getElementById('new-pin').value;
@@ -1318,26 +1433,38 @@ function rMyProfile(){
 }
 
 function rMyAvail(){
+  const now=new Date();
   return`<div class="section-title" style="margin-bottom:16px">My Availability</div>
-  <p style="font-size:13px;color:var(--text2);margin-bottom:16px">Set your weekly availability so management can schedule accordingly.</p>
-  <div id="my-avail-content"><div class="loader">Loading...</div></div>`;
+  <p style="font-size:13px;color:var(--text2);margin-bottom:16px">Tap dates to mark when you're available (green) or unavailable.</p>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+    <button class="week-btn" onclick="availPrevMonth();renderMyAvailCal()">← Prev</button>
+    <span id="my-avail-label" style="font-weight:700;font-size:14px"></span>
+    <button class="week-btn" onclick="availNextMonth();renderMyAvailCal()">Next →</button>
+  </div>
+  <div id="avail-cal" style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:16px"></div>
+  <div style="display:flex;gap:8px;margin-bottom:16px">
+    <button class="edit-btn" onclick="markAllMonth(true);renderMyAvailCal()">✅ All Available</button>
+    <button class="edit-btn" onclick="markAllMonth(false);renderMyAvailCal()">❌ All Unavailable</button>
+  </div>
+  <button class="btn btn-primary" onclick="saveMyAvail()">Save Availability</button>`;
 }
 async function loadMyAvail(){
-  const el=document.getElementById('my-avail-content');if(!el)return;
+  availYear=new Date().getFullYear();availMonth=new Date().getMonth();
   const snap=await getDoc(doc(db,'availability',currentEmpId));
   availState=snap.exists()?snap.data():{};
-  el.innerHTML=`<div class="avail-grid" id="avail-days"></div><div id="avail-times" style="margin-top:14px"></div>
-  <button class="btn btn-primary" style="margin-top:16px" onclick="saveMyAvail()">Save Availability</button>`;
   document.getElementById('avail-emp-id').value=currentEmpId;
-  renderAvailDays();
+  renderMyAvailCal();
+}
+function renderMyAvailCal(){
+  const lbl=document.getElementById('my-avail-label');
+  const cal=document.getElementById('avail-cal');if(!cal)return;
+  const d=new Date(availYear,availMonth,1);
+  if(lbl)lbl.textContent=d.toLocaleString('en-US',{month:'long',year:'numeric'});
+  // Re-use the avail-cal render from modal
+  document.getElementById('avail-emp-id').value=currentEmpId;
+  renderAvailCal();
 }
 window.saveMyAvail=async function(){
-  DAYS_KEY.forEach(dk=>{
-    if(availState[dk]&&availState[dk].on!==false){
-      const s=document.getElementById('av-'+dk+'-s');const e=document.getElementById('av-'+dk+'-e');
-      if(s&&e){availState[dk].start=s.value;availState[dk].end=e.value;}
-    }
-  });
   await setDoc(doc(db,'availability',currentEmpId),{...availState,updatedAt:serverTimestamp()});
   alert('Availability saved!');
 };
@@ -1556,6 +1683,121 @@ window.seedTestData = async function(){
 
   alert('✅ Test data added!\n\n3 employees:\n• Summer Brown — PIN: 1234\n• Amy Flair — PIN: 5678\n• Jenna Lawhorn — PIN: 9999\n\nCheck: Schedule, Employees, Expenses, Time Off\nTest employee login on Employee Access tab.');
   render();
+};
+
+
+window.savePayrollPeriod=async function(){
+  const start=document.getElementById('pay-start')?.value;
+  const end=document.getElementById('pay-end')?.value;
+  if(!start||!end){alert('Set pay period start and end dates first');return;}
+  const bizId=bizFilter==='all'?businesses[0]?.id:bizFilter;
+  const biz=businesses.find(b=>b.id===bizId);
+  if(!bizId){alert('Select a business first');return;}
+  const year=start.split('-')[0];
+  const month=new Date(start+'T12:00:00').toLocaleString('en-US',{month:'long'});
+  // Collect rows
+  const rows=[];
+  document.querySelectorAll('[id^="hrs-"]').forEach(el=>{
+    const empId=el.id.replace('hrs-','');
+    const e=employees.find(x=>x.id===empId);if(!e)return;
+    const hrs=parseFloat(el.value)||0;
+    const gross=parseFloat(document.getElementById('pay-'+empId)?.textContent?.replace('$','')||0);
+    if(hrs>0)rows.push({name:`${e.first} ${e.last}`,rate:e.rate||0,hours:hrs,gross,ot:hrs>40});
+  });
+  const total=rows.reduce((s,r)=>s+r.gross,0);
+  if(rows.length===0){alert('Enter hours for at least one employee first');return;}
+  const record={bizId,bizName:biz?.name||'',periodStart:start,periodEnd:end,year,month,employees:rows,totalLabor:total,savedAt:serverTimestamp()};
+  await addDoc(collection(db,'payroll_records'),record);
+  alert(`✅ Payroll saved!
+${biz?.name||''}
+${month} ${year}
+Period: ${fmtD(start)} – ${fmtD(end)}
+Total Labor: $${total.toFixed(2)}
+
+Visible in History tab.`);
+  viewPayrollHistory();
+};
+
+window.viewPayrollHistory=async function(){
+  const el=document.getElementById('payroll-history');if(!el)return;
+  el.innerHTML='<div class="loader">Loading history...</div>';
+  const bizId=bizFilter==='all'?'all':bizFilter;
+  const snap=await getDocs(query(collection(db,'payroll_records'),orderBy('savedAt','desc')));
+  let records=snap.docs.map(d=>({id:d.id,...d.data()}));
+  if(bizId!=='all')records=records.filter(r=>r.bizId===bizId);
+  if(records.length===0){el.innerHTML='<div class="empty"><div class="empty-icon">📁</div><p>No saved payroll periods yet</p></div>';return;}
+  el.innerHTML='<div style="font-weight:700;font-size:15px;margin-bottom:12px">Payroll History</div>'+
+  records.map(r=>`<div class="card" style="padding:14px;margin-bottom:10px">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div>
+        <div style="font-weight:700;font-size:14px">${r.bizName||''} — ${r.month} ${r.year}</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:2px">${fmtD(r.periodStart)} → ${fmtD(r.periodEnd)}</div>
+        <div style="margin-top:8px;display:flex;flex-direction:column;gap:3px">
+          ${(r.employees||[]).map(e=>`<span style="font-size:12px;color:var(--text2)">${e.name}: ${e.hours}hrs × $${e.rate}/hr = <b style="color:var(--text)">$${e.gross.toFixed(2)}</b>${e.ot?' <span style="color:var(--warning)">OT</span>':''}</span>`).join('')}
+        </div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:18px;font-weight:800;color:var(--success)">$${(r.totalLabor||0).toFixed(2)}</div>
+        <div style="font-size:10px;color:var(--text2)">Total Labor</div>
+        <button class="edit-btn" style="margin-top:8px" onclick="copyPayrollRecord('${r.id}')">📋 Copy</button>
+      </div>
+    </div>
+  </div>`).join('');
+};
+
+window.copyPayrollRecord=async function(id){
+  const snap=await getDoc(doc(db,'payroll_records',id));
+  if(!snap.exists())return;
+  const r=snap.data();
+  let txt=`PAYROLL SUMMARY — ${r.bizName||''}
+`;
+  txt+=`Period: ${fmtD(r.periodStart)} – ${fmtD(r.periodEnd)}
+`;
+  txt+=`Month: ${r.month} ${r.year}
+`;
+  txt+='─'.repeat(50)+'
+';
+  (r.employees||[]).forEach(e=>{
+    txt+=`${e.name.padEnd(20)} ${String(e.hours+'hrs').padEnd(8)} $${e.rate}/hr   $${e.gross.toFixed(2)}${e.ot?' (OT)':''}
+`;
+  });
+  txt+='─'.repeat(50)+'
+';
+  txt+=`TOTAL LABOR: $${(r.totalLabor||0).toFixed(2)}
+`;
+  navigator.clipboard.writeText(txt).then(()=>alert('✅ Payroll copied — paste into email to your CPA.')).catch(()=>prompt('Copy this:',txt));
+};
+
+window.exportAllData=async function(){
+  const lines=['PRIT BUSINESS OP — DATA EXPORT','Generated: '+new Date().toLocaleString(),'','=== BUSINESSES ==='];
+  businesses.forEach(b=>{
+    lines.push(`${b.name} (${(b.type||'').toUpperCase()})${b.ein?' EIN:'+b.ein:''}${b.state?' · '+b.state:''}`);
+    if(b.address)lines.push(`  Address: ${b.address}`);
+    if(b.owner)lines.push(`  Operator: ${b.owner}`);
+    lines.push('');
+  });
+  lines.push('=== EMPLOYEES ===');
+  employees.forEach(e=>{
+    const biz=businesses.find(b=>b.id===e.bizId);
+    lines.push(`${e.first} ${e.last} — ${e.role||'Associate'} @ ${biz?biz.name:''}`);
+    lines.push(`  Phone: ${e.phone||'—'}${e.phone2?' / '+e.phone2:''} | Rate: $${e.rate||0}/hr | Status: ${e.status}`);
+    if(e.hireDate)lines.push(`  Hire Date: ${fmtD(e.hireDate)}`);
+    lines.push('');
+  });
+  navigator.clipboard.writeText(lines.join('
+')).then(()=>alert('✅ Data exported to clipboard!')).catch(()=>prompt('Copy:',lines.join('
+')));
+};
+
+window.viewPayrollAllBiz=async function(){
+  const snap=await getDocs(query(collection(db,'payroll_records'),orderBy('savedAt','desc')));
+  const records=snap.docs.map(d=>({id:d.id,...d.data()}));
+  if(records.length===0){alert('No payroll records saved yet.');return;}
+  const txt=records.map(r=>`${r.bizName||''}  |  ${r.month} ${r.year}  |  ${fmtD(r.periodStart)} – ${fmtD(r.periodEnd)}  |  Total: $${(r.totalLabor||0).toFixed(2)}`).join('
+');
+  alert('All Payroll Records:
+
+'+txt);
 };
 
 window.render=render;
