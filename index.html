@@ -460,7 +460,7 @@ function renderDashboard(){
   const totalEmp = employees.filter(e=>e.status!=='inactive').length;
   const totalBiz = businesses.length;
   const now = new Date(); const hour=now.getHours();
-  const greeting = hour<12?'Good morning':'hour<17?'Good afternoon':'Good evening';
+  const greeting = hour<12?'Good morning':hour<17?'Good afternoon':'Good evening';
   return `
   <div style="margin-bottom:24px">
     <h2 style="font-size:22px;font-weight:800">${greeting} 👋</h2>
