@@ -1085,6 +1085,15 @@ function rAdminPanel(){
   </div>
 
   <div class="admin-section">
+    <div class="admin-section-title">🧹 Database Tools</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="add-btn" onclick="cleanupDuplicates()">🧹 Remove Duplicate Businesses</button>
+      <button class="btn-sm btn-danger" onclick="nukeAndReseed()">🔄 Reset & Reseed (3 clean businesses)</button>
+    </div>
+    <p style="font-size:11px;color:var(--text3);margin-top:8px">Use "Remove Duplicates" first. Use "Reset & Reseed" only if you want to start completely fresh.</p>
+  </div>
+
+  <div class="admin-section">
     <div class="admin-section-title">📋 Quick Stats</div>
     <div class="pay-grid">
       <div class="pay-stat"><div class="pay-label">Total Businesses</div><div class="pay-val" style="color:var(--accent)">${businesses.length}</div></div>
@@ -1386,6 +1395,86 @@ window.saveEmployee=async function(){
   if(editId){await updateDoc(doc(db,'employees',editId),emp);const idx=employees.findIndex(e=>e.id===editId);if(idx>-1)employees[idx]={...employees[idx],...emp};}
   else{emp.createdAt=serverTimestamp();const ref=await addDoc(collection(db,'employees'),emp);employees.push({id:ref.id,...emp});}
   closeModal('modal-emp');render();
+};
+
+
+// ── DATABASE CLEANUP ──
+window.cleanupDuplicates = async function(){
+  const snap = await getDocs(collection(db,'businesses'));
+  const all = snap.docs.map(d=>({id:d.id,...d.data()}));
+  
+  // Group by name
+  const groups = {};
+  all.forEach(b=>{
+    const key = (b.name||'').toLowerCase().trim();
+    if(!groups[key]) groups[key] = [];
+    groups[key].push(b);
+  });
+  
+  // Find duplicates
+  const toDelete = [];
+  Object.values(groups).forEach(group=>{
+    if(group.length <= 1) return;
+    // Sort — keep the one with most data (has hours, ein, address)
+    group.sort((a,b)=>{
+      const scoreA = (a.hours?3:0)+(a.ein?2:0)+(a.address?1:0);
+      const scoreB = (b.hours?3:0)+(b.ein?2:0)+(b.address?1:0);
+      return scoreB - scoreA;
+    });
+    // Keep index 0, delete rest
+    for(let i=1;i<group.length;i++) toDelete.push(group[i]);
+  });
+  
+  if(toDelete.length === 0){
+    alert('No duplicates found. Database is clean.');
+    return;
+  }
+  
+  const names = [...new Set(toDelete.map(b=>b.name))];
+  if(!confirm(`Found ${toDelete.length} duplicate businesses to remove:\n\n${names.slice(0,8).join('\n')}${names.length>8?'\n...and more':''}\n\nKeeping 1 of each unique name. Continue?`)) return;
+  
+  // Delete duplicates
+  const batch = toDelete.map(b => deleteDoc(doc(db,'businesses',b.id)));
+  await Promise.all(batch);
+  
+  // Reload
+  const freshSnap = await getDocs(collection(db,'businesses'));
+  businesses = freshSnap.docs.map(d=>({id:d.id,...d.data()}));
+  
+  // Now fix Pravin Rental's name if needed
+  const pravin = businesses.find(b=>b.name&&b.name.toLowerCase().includes('father'));
+  if(pravin){
+    await updateDoc(doc(db,'businesses',pravin.id),{name:"Pravin Rental's"});
+    const idx = businesses.findIndex(b=>b.id===pravin.id);
+    if(idx>-1) businesses[idx].name = "Pravin Rental's";
+  }
+  
+  alert(`Done! Removed ${toDelete.length} duplicates.${pravin?' Renamed to Pravin Rental\'s.':''} You now have ${businesses.length} businesses.`);
+  render();
+};
+
+window.nukeAndReseed = async function(){
+  if(!confirm('DELETE ALL businesses and start fresh with 3 clean ones?\n\nEmployees will be unaffected but may lose their business link.')) return;
+  
+  // Delete all businesses
+  const snap = await getDocs(collection(db,'businesses'));
+  await Promise.all(snap.docs.map(d=>deleteDoc(doc(db,'businesses',d.id))));
+  
+  // Reseed clean
+  const seed = [
+    {name:'The UPS Store #8181',type:'franchise',ein:'',state:'TN',address:'7201 Whites Creek Pike, Joelton, TN 37080',franchisor:'UPS Store Inc.',owner:'Prit',notes:'Inside Heritage Travel Center. Opened May 7, 2026.',hours:HOURS_TEMPLATES.ups},
+    {name:"Pravin Rental's",type:'rental',ein:'',state:'IL',address:'',owner:'Prit (Manager)',notes:'Managed by Prit. No employees. Management company handles operations.'},
+    {name:'Real Estate (Upcoming)',type:'real-estate',ein:'',state:'TN',address:'',owner:'Prit',notes:'Placeholder — add details when entity is formed.'},
+  ];
+  
+  businesses = [];
+  for(const s of seed){
+    const ref = await addDoc(collection(db,'businesses'),{...s,createdAt:serverTimestamp()});
+    businesses.push({id:ref.id,...s});
+  }
+  
+  alert('Done! 3 clean businesses created: UPS Store #8181, Pravin Rental\'s, Real Estate (Upcoming).');
+  render();
 };
 
 window.openModal=function(id){document.getElementById(id).classList.add('open');};
