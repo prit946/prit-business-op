@@ -440,6 +440,51 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   </div>
 </div>
 
+<!-- OPEN SHIFT MODAL -->
+<div class="modal-overlay" id="modal-open-shift">
+  <div class="modal">
+    <div class="modal-title">Post Open Shift</div>
+    <div class="field"><label>Business</label><select id="os-biz"></select></div>
+    <div class="form-row">
+      <div class="field"><label>Date</label><input type="date" id="os-date"></div>
+      <div class="field"><label>Slot</label><select id="os-slot"><option value="am">AM</option><option value="pm">PM</option></select></div>
+    </div>
+    <div class="form-row">
+      <div class="field"><label>Start Time</label><input type="time" id="os-start" value="09:00"></div>
+      <div class="field"><label>End Time</label><input type="time" id="os-end" value="17:00"></div>
+    </div>
+    <div class="field"><label>Note (optional)</label><input type="text" id="os-note" placeholder="Any special instructions"></div>
+    <div class="modal-actions">
+      <button class="btn-sm btn-outline" style="flex:1" onclick="closeModal('modal-open-shift')">Cancel</button>
+      <button class="btn-sm btn-primary btn" style="flex:2;width:auto;padding:9px 18px" onclick="postOpenShift()">Post Shift</button>
+    </div>
+  </div>
+</div>
+
+<!-- LOG BOOK MODAL -->
+<div class="modal-overlay" id="modal-log">
+  <div class="modal">
+    <div class="modal-title">Add Log Entry</div>
+    <div class="field"><label>Business</label><select id="log-biz"></select></div>
+    <div class="field"><label>Category</label>
+      <select id="log-cat">
+        <option value="general">General</option>
+        <option value="incident">Incident</option>
+        <option value="maintenance">Maintenance</option>
+        <option value="customer">Customer Issue</option>
+        <option value="handoff">Shift Handoff</option>
+        <option value="performance">Performance Note</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+    <div class="field"><label>Note</label><textarea id="log-note" placeholder="What happened today? Notes for the next shift..." style="width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px;color:var(--text);font-size:14px;outline:none;min-height:100px;resize:vertical"></textarea></div>
+    <div class="modal-actions">
+      <button class="btn-sm btn-outline" style="flex:1" onclick="closeModal('modal-log')">Cancel</button>
+      <button class="btn-sm btn-primary btn" style="flex:2;width:auto;padding:9px 18px" onclick="saveLogEntry()">Save Entry</button>
+    </div>
+  </div>
+</div>
+
 <!-- CONFIRM MODAL -->
 <div class="modal-overlay" id="modal-confirm">
   <div class="modal">
@@ -599,8 +644,8 @@ function startApp(){
 }
 
 // ── NAV ──
-const ADMIN_TABS=[['dashboard','Dashboard'],['businesses','Businesses'],['employees','Employees'],['schedule','Schedule'],['payroll','Payroll'],['expenses','Expenses'],['timeoff','Time Off'],['chat','Chat'],['admin','Admin Panel'],['tips','Tips ❓']];
-const EMP_TABS=[['my-schedule','My Schedule'],['my-timeoff','Time Off'],['chat','Chat'],['my-profile','My Profile'],['my-avail','Availability']];
+const ADMIN_TABS=[['dashboard','Dashboard'],['businesses','Businesses'],['employees','Employees'],['schedule','Schedule'],['payroll','Payroll'],['expenses','Expenses'],['timeoff','Time Off'],['shifts','Open Shifts'],['logbook','Log Book'],['chat','Chat'],['admin','Admin Panel'],['tips','Tips ❓']];
+const EMP_TABS=[['my-schedule','My Schedule'],['my-timeoff','Time Off'],['shifts','Open Shifts'],['chat','Chat'],['my-profile','My Profile'],['my-avail','Availability']];
 
 function buildNav(){
   const tabs=userRole==='admin'?ADMIN_TABS:EMP_TABS;
@@ -637,6 +682,8 @@ function render(){
   else if(t==='my-timeoff'){c.innerHTML=rMyTimeOff();setTimeout(loadMyTO,80);}
   else if(t==='my-profile')c.innerHTML=rMyProfile();
   else if(t==='my-avail'){c.innerHTML=rMyAvail();setTimeout(loadMyAvail,80);}
+  else if(t==='shifts'){c.innerHTML=rOpenShifts();setTimeout(loadOpenShifts,80);}
+  else if(t==='logbook'){c.innerHTML=rLogBook();setTimeout(loadLogBook,80);}
 }
 
 // ── DASHBOARD ──
@@ -864,49 +911,6 @@ window.clearShift=async function(){
   if(!shiftCtx)return;const k=`${shiftCtx.empId}_${shiftCtx.date}_${shiftCtx.slot}`;
   delete window._shifts[k];await deleteDoc(doc(db,'shifts',k));
   closeModal('modal-shift');render();
-};
-
-window.copyScheduleAsText=function(bizId){
-  const biz=businesses.find(b=>b.id===bizId);
-  const dates=getWeekDates(weekOffset);
-  const wl=`Week of ${dates[0].toLocaleDateString('en-US',{month:'short',day:'numeric'})} – ${dates[6].toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}`;
-  const schedEmps=employees.filter(e=>e.bizId===bizId&&e.status!=='inactive');
-  const dayNames=dates.map(d=>DAYS_SHORT[d.getDay()]+' '+d.getDate());
-  // Build table
-  const col=12;
-  const pad=(s,n)=>String(s).padEnd(n).slice(0,n);
-  let txt=`${biz?biz.name:''} — Schedule
-${wl}
-`;
-  txt+='─'.repeat(90)+'
-';
-  txt+=pad('Employee',16)+dayNames.map(d=>pad(d,11)).join('')+'
-';
-  txt+='─'.repeat(90)+'
-';
-  schedEmps.forEach(e=>{
-    const name=`${e.first} ${e.last}`;
-    let amLine=pad(name+' AM',16);
-    let pmLine=pad('',16);
-    dates.forEach(d=>{
-      const ds=d.toISOString().split('T')[0];
-      const am=window._shifts[`${e.id}_${ds}_am`];
-      const pm=window._shifts[`${e.id}_${ds}_pm`];
-      amLine+=pad(am?`${fmt12(am.s)}-${fmt12(am.e)}`:'—',11);
-      pmLine+=pad(pm?`${fmt12(pm.s)}-${fmt12(pm.e)}`:'—',11);
-    });
-    txt+=amLine+'
-'+pmLine+'
-';
-  });
-  txt+='─'.repeat(90)+'
-';
-  navigator.clipboard.writeText(txt).then(()=>alert('✅ Schedule copied to clipboard!
-
-Paste it into any group chat or text message.')).catch(()=>{
-    // Fallback: show in prompt
-    prompt('Copy this schedule:',txt);
-  });
 };
 
 window.publishSchedule=async function(bizId){
@@ -1321,16 +1325,44 @@ function renderAvailCal(){
     const key=`${availYear}-${String(availMonth+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
     const state=availState[key];
     const on=state===true;const off=state===false;
-    cells+=`<div onclick="toggleAvailDate('${key}')" style="text-align:center;padding:6px 2px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;background:${on?'#22c55e33':off?'#ef444422':'var(--surface2)'};color:${on?'var(--success)':off?'var(--danger)':'var(--text3)'};">${day}</div>`;
+    const timeLabel=on&&state&&state.start?`<div style="font-size:9px;color:var(--success);line-height:1.2">${fmt12(state.start)}</div><div style="font-size:9px;color:var(--success)">${fmt12(state.end)}</div>`:'';
+    cells+=`<div style="text-align:center;padding:4px 2px;border-radius:8px;cursor:pointer;background:${on?'#22c55e33':off?'#ef444422':'var(--surface2)'};color:${on?'var(--success)':off?'var(--danger)':'var(--text3)'};">
+      <div onclick="toggleAvailDate('${key}')" style="font-size:12px;font-weight:600;">${day}</div>
+      ${timeLabel}
+      ${on?`<div onclick="editAvailTime('${key}')" style="font-size:9px;color:var(--accent);cursor:pointer">✏️</div>`:''}
+    </div>`;
   }
   cal.innerHTML=cells;
 }
 window.toggleAvailDate=function(key){
-  if(availState[key]===true)availState[key]=false;
-  else if(availState[key]===false)delete availState[key];
-  else availState[key]=true;
+  const cur=availState[key];
+  if(!cur||cur===false){
+    // Set available with default times
+    const defS=document.getElementById('avail-def-start')?.value||'08:00';
+    const defE=document.getElementById('avail-def-end')?.value||'17:00';
+    availState[key]={on:true,start:defS,end:defE};
+  } else if(cur&&cur.on){
+    // Was available — mark unavailable
+    availState[key]=false;
+  } else {
+    // Was unavailable — clear
+    delete availState[key];
+  }
   renderAvailCal();
 };
+
+window.editAvailTime=function(key){
+  const cur=availState[key];
+  if(!cur||!cur.on)return;
+  const s=cur.start||'08:00',e=cur.end||'17:00';
+  const newS=prompt(`Available from (${key}):`,s);
+  if(!newS)return;
+  const newE=prompt(`Available until (${key}):`,e);
+  if(!newE)return;
+  availState[key]={on:true,start:newS,end:newE};
+  renderAvailCal();
+};
+
 window.availPrevMonth=function(){availMonth--;if(availMonth<0){availMonth=11;availYear--;}renderAvailCal();};
 window.availNextMonth=function(){availMonth++;if(availMonth>11){availMonth=0;availYear++;}renderAvailCal();};
 window.markAllMonth=function(avail){
@@ -1798,6 +1830,161 @@ window.viewPayrollAllBiz=async function(){
   alert('All Payroll Records:
 
 '+txt);
+};
+
+// ── OPEN SHIFTS ──
+function rOpenShifts(){
+  const bizOpts=`<option value="all">All Businesses</option>`+businesses.map(b=>`<option value="${b.id}">${b.name}</option>`).join('');
+  const isAdmin=userRole==='admin';
+  return`<div class="section-header"><div class="section-title">Open Shifts</div>${isAdmin?`<button class="add-btn" onclick="openOpenShiftModal()">+ Post Shift</button>`:''}</div>
+  ${isAdmin?`<div style="margin-bottom:14px"><select onchange="setBizFilter(this.value)" style="max-width:280px">${bizOpts}</select></div>`:''}
+  <div class="card" style="margin-bottom:14px;font-size:13px;color:var(--text2)">
+    ${isAdmin?'Post open shifts here. Employees see them and can claim. You approve claims.':'Tap Claim on any shift to request it. Your manager will confirm.'}
+  </div>
+  <div id="open-shifts-list"><div class="loader">Loading...</div></div>`;
+}
+
+async function loadOpenShifts(){
+  const list=document.getElementById('open-shifts-list');if(!list)return;
+  const snap=await getDocs(query(collection(db,'open_shifts'),orderBy('date','asc')));
+  let shifts=snap.docs.map(d=>({id:d.id,...d.data()}));
+  const bizId=bizFilter==='all'?null:bizFilter;
+  if(bizId&&userRole==='admin')shifts=shifts.filter(s=>s.bizId===bizId);
+  if(userRole==='associate'){
+    const emp=employees.find(e=>e.id===currentEmpId);
+    if(emp)shifts=shifts.filter(s=>s.bizId===emp.bizId);
+  }
+  if(shifts.length===0){list.innerHTML='<div class="empty"><div class="empty-icon">📋</div><p>No open shifts posted</p></div>';return;}
+  list.innerHTML=shifts.map(s=>{
+    const biz=businesses.find(b=>b.id===s.bizId);
+    const claimed=s.claims&&s.claims.includes(currentEmpId);
+    return`<div class="card" style="padding:14px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-weight:700;font-size:14px">${fmtD(s.date)} — ${s.slot==='am'?'AM':'PM'} Shift</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:3px">${biz?biz.name:''} · ${fmt12(s.start)}–${fmt12(s.end)}</div>
+          ${s.note?`<div style="font-size:12px;color:var(--text2);margin-top:2px">${s.note}</div>`:''}
+          ${s.claims&&s.claims.length?`<div style="font-size:11px;color:var(--warning);margin-top:4px">⚡ ${s.claims.length} employee(s) interested</div>`:''}
+        </div>
+        <div style="display:flex;gap:6px;flex-direction:column;align-items:flex-end">
+          ${userRole==='associate'?`<button class="action-btn ${claimed?'deny-btn':'approve-btn'}" onclick="claimShift('${s.id}')">${claimed?'✓ Claimed':'Claim'}</button>`:''}
+          ${userRole==='admin'&&s.claims&&s.claims.length?`<button class="add-btn" onclick="approveOpenShift('${s.id}')">Approve Claim</button>`:''}
+          ${userRole==='admin'?`<button class="action-btn deny-btn" onclick="deleteOpenShift('${s.id}')">Remove</button>`:''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+window.claimShift=async function(shiftId){
+  const snap=await getDoc(doc(db,'open_shifts',shiftId));
+  if(!snap.exists())return;
+  const claims=snap.data().claims||[];
+  if(claims.includes(currentEmpId)){
+    await updateDoc(doc(db,'open_shifts',shiftId),{claims:claims.filter(c=>c!==currentEmpId)});
+    alert('Claim removed.');
+  }else{
+    await updateDoc(doc(db,'open_shifts',shiftId),{claims:[...claims,currentEmpId]});
+    alert('✅ You claimed this shift! Your manager will confirm.');
+  }
+  loadOpenShifts();
+};
+
+window.approveOpenShift=async function(shiftId){
+  const snap=await getDoc(doc(db,'open_shifts',shiftId));
+  if(!snap.exists())return;
+  const s=snap.data();
+  const claims=s.claims||[];
+  if(!claims.length){alert('No one has claimed this shift yet.');return;}
+  // Show who claimed it
+  const claimers=claims.map(id=>{const e=employees.find(x=>x.id===id);return e?`${e.first} ${e.last}`:id;}).join(', ');
+  const ok=confirm(`Assign this shift to: ${claimers}?
+
+This will assign the shift and remove the open posting.`);
+  if(!ok)return;
+  // Assign shift to first claimer
+  const empId=claims[0];
+  const k=`${empId}_${s.date}_${s.slot}`;
+  await setDoc(doc(db,'shifts',k),{empId,date:s.date,slot:s.slot,s:s.start,e:s.end,n:'(Open shift claim)'});
+  window._shifts[k]={empId,date:s.date,slot:s.slot,s:s.start,e:s.end};
+  await deleteDoc(doc(db,'open_shifts',shiftId));
+  alert('✅ Shift assigned!');
+  loadOpenShifts();
+};
+
+window.deleteOpenShift=function(id){confirm2('Remove Open Shift','Remove this open shift posting?',async()=>{await deleteDoc(doc(db,'open_shifts',id));loadOpenShifts();});};
+
+// ── MANAGER LOG BOOK ──
+function rLogBook(){
+  const bizOpts=businesses.map(b=>`<option value="${b.id}">${b.name}</option>`).join('');
+  return`<div class="section-header"><div class="section-title">Manager Log Book</div><button class="add-btn" onclick="openLogModal()">+ Add Entry</button></div>
+  <div style="margin-bottom:14px"><select onchange="setBizFilter(this.value)" style="max-width:280px"><option value="all">All Businesses</option>${bizOpts}</select></div>
+  <div class="card" style="margin-bottom:14px;font-size:13px;color:var(--text2)">Daily notes, incidents, handoff info, observations. Visible to all managers.</div>
+  <div id="log-list"><div class="loader">Loading...</div></div>`;
+}
+
+async function loadLogBook(){
+  const list=document.getElementById('log-list');if(!list)return;
+  const snap=await getDocs(query(collection(db,'logbook'),orderBy('createdAt','desc')));
+  let entries=snap.docs.map(d=>({id:d.id,...d.data()}));
+  if(bizFilter!=='all')entries=entries.filter(e=>e.bizId===bizFilter);
+  if(entries.length===0){list.innerHTML='<div class="empty"><div class="empty-icon">📓</div><p>No log entries yet</p></div>';return;}
+  list.innerHTML=entries.map(e=>{
+    const biz=businesses.find(b=>b.id===e.bizId);
+    const ts=e.createdAt?.toDate?new Date(e.createdAt.toDate()).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'';
+    return`<div class="card" style="padding:14px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+        <div>
+          <span class="badge badge-blue">${biz?biz.name:''}</span>
+          ${e.category?`<span class="badge badge-gray" style="margin-left:4px">${e.category}</span>`:''}
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:11px;color:var(--text3)">${ts}</span>
+          ${userRole==='admin'?`<button onclick="delLog('${e.id}')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px">✕</button>`:''}
+        </div>
+      </div>
+      <div style="font-size:13px;line-height:1.5">${e.note||''}</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:6px">— ${e.author||'Manager'}</div>
+    </div>`;
+  }).join('');
+}
+
+window.saveLogEntry=async function(){
+  const note=document.getElementById('log-note').value.trim();
+  if(!note){alert('Write a note first');return;}
+  const bizId=document.getElementById('log-biz').value;
+  const author=userRole==='admin'?(currentUser?.email?.split('@')[0]||'Admin'):currentEmpName;
+  await addDoc(collection(db,'logbook'),{bizId,note,category:document.getElementById('log-cat').value,author,createdAt:serverTimestamp()});
+  closeModal('modal-log');document.getElementById('log-note').value='';
+  loadLogBook();
+};
+window.delLog=function(id){confirm2('Delete Entry','Remove this log entry?',async()=>{await deleteDoc(doc(db,'logbook',id));loadLogBook();});};
+
+window.postOpenShift=async function(){
+  const date=document.getElementById('os-date').value;
+  const bizId=document.getElementById('os-biz').value;
+  if(!date||!bizId){alert('Select business and date');return;}
+  await addDoc(collection(db,'open_shifts'),{
+    bizId,date,slot:document.getElementById('os-slot').value,
+    start:document.getElementById('os-start').value,
+    end:document.getElementById('os-end').value,
+    note:document.getElementById('os-note').value.trim(),
+    claims:[],postedAt:serverTimestamp()
+  });
+  closeModal('modal-open-shift');
+  document.getElementById('os-note').value='';
+  alert('✅ Open shift posted. Employees can now claim it.');
+  loadOpenShifts();
+};
+
+window.openOpenShiftModal=function(){
+  document.getElementById('os-biz').innerHTML=businesses.map(b=>`<option value="${b.id}">${b.name}</option>`).join('');
+  document.getElementById('os-date').value=new Date().toISOString().split('T')[0];
+  openModal('modal-open-shift');
+};
+window.openLogModal=function(){
+  document.getElementById('log-biz').innerHTML=businesses.map(b=>`<option value="${b.id}">${b.name}</option>`).join('');
+  openModal('modal-log');
 };
 
 window.render=render;
