@@ -237,16 +237,87 @@
 
   <div class="nav" id="main-nav">
     <div class="nav-item active" onclick="showTab('dashboard')">Dashboard</div>
+    <div class="nav-item" onclick="showTab('businesses')">Businesses</div>
     <div class="nav-item" onclick="showTab('employees')">Employees</div>
     <div class="nav-item" onclick="showTab('schedule')">Schedule</div>
     <div class="nav-item" onclick="showTab('payroll')">Payroll</div>
+    <div class="nav-item" onclick="showTab('expenses')">Expenses</div>
     <div class="nav-item" onclick="showTab('timeoff')">Time Off</div>
-    <div class="nav-item" onclick="showTab('chat')">Team Chat</div>
-    <div class="nav-item" onclick="showTab('businesses')">Businesses</div>
+    <div class="nav-item" onclick="showTab('chat')">Chat</div>
+    <div class="nav-item" onclick="showTab('tips')">Tips ❓</div>
   </div>
 
   <div class="content" id="main-content">
     <div class="loader">Loading...</div>
+  </div>
+</div>
+
+
+<!-- EXPENSE MODAL -->
+<div class="modal-overlay" id="modal-expense">
+  <div class="modal">
+    <div class="modal-title">Log Expense</div>
+    <div class="field"><label>Business</label><select id="exp-biz"></select></div>
+    <div class="field"><label>Category</label>
+      <select id="exp-cat">
+        <option value="property-tax">Property Tax</option>
+        <option value="management-fee">Property Management Fee</option>
+        <option value="insurance">Insurance</option>
+        <option value="utilities">Utilities</option>
+        <option value="maintenance">Maintenance / Repairs</option>
+        <option value="supplies">Supplies</option>
+        <option value="payroll">Payroll</option>
+        <option value="rent">Rent / Lease</option>
+        <option value="franchise-fee">Franchise Fee / Royalty</option>
+        <option value="professional">Professional Fees (CPA, Legal)</option>
+        <option value="marketing">Marketing</option>
+        <option value="equipment">Equipment</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+    <div class="form-row">
+      <div class="field"><label>Amount ($)</label><input type="number" id="exp-amount" placeholder="0.00" step="0.01"></div>
+      <div class="field"><label>Date</label><input type="date" id="exp-date"></div>
+    </div>
+    <div class="field"><label>Description</label><input type="text" id="exp-desc" placeholder="Optional detail"></div>
+    <div class="field"><label>Paid To</label><input type="text" id="exp-payee" placeholder="Vendor, company, person..."></div>
+    <div class="modal-actions">
+      <button class="btn-sm btn-outline" style="flex:1" onclick="closeModal('modal-expense')">Cancel</button>
+      <button class="btn-sm btn-primary btn" style="flex:2;width:auto;padding:10px 20px" onclick="saveExpense()">Save Expense</button>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT BUSINESS MODAL -->
+<div class="modal-overlay" id="modal-edit-biz">
+  <div class="modal">
+    <div class="modal-title">Edit Business</div>
+    <input type="hidden" id="edit-biz-id">
+    <div class="field"><label>Business Name</label><input type="text" id="edit-biz-name"></div>
+    <div class="field"><label>Type</label>
+      <select id="edit-biz-type">
+        <option value="franchise">Franchise</option>
+        <option value="llc">LLC</option>
+        <option value="s-corp">S-Corp</option>
+        <option value="sole-prop">Sole Proprietorship</option>
+        <option value="rental">Rental Property</option>
+        <option value="restaurant">Restaurant / Food</option>
+        <option value="real-estate">Real Estate</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+    <div class="form-row">
+      <div class="field"><label>EIN</label><input type="text" id="edit-biz-ein"></div>
+      <div class="field"><label>State</label><input type="text" id="edit-biz-state"></div>
+    </div>
+    <div class="field"><label>Address</label><input type="text" id="edit-biz-address"></div>
+    <div class="field"><label>Franchisor / Parent Co.</label><input type="text" id="edit-biz-franchisor"></div>
+    <div class="field"><label>Owner / Operator</label><input type="text" id="edit-biz-owner"></div>
+    <div class="field"><label>Notes</label><input type="text" id="edit-biz-notes"></div>
+    <div class="modal-actions">
+      <button class="btn-sm btn-outline" style="flex:1" onclick="closeModal('modal-edit-biz')">Cancel</button>
+      <button class="btn-sm btn-primary btn" style="flex:2;width:auto;padding:10px 20px" onclick="updateBusiness()">Save Changes</button>
+    </div>
   </div>
 </div>
 
@@ -437,7 +508,7 @@ let currentTab = 'dashboard';
 window.showTab = function(tab){
   currentTab=tab;
   document.querySelectorAll('.nav-item').forEach((el,i)=>{
-    const tabs=['dashboard','employees','schedule','payroll','timeoff','chat','businesses'];
+    const tabs=['dashboard','businesses','employees','schedule','payroll','expenses','timeoff','chat','tips'];
     el.classList.toggle('active', tabs[i]===tab);
   });
   if(tab==='chat') startChat(); else { if(chatUnsub){chatUnsub();chatUnsub=null;} }
@@ -451,8 +522,10 @@ function render(){
   else if(currentTab==='employees') c.innerHTML=renderEmployees();
   else if(currentTab==='schedule') c.innerHTML=renderSchedule();
   else if(currentTab==='payroll') c.innerHTML=renderPayroll();
+  else if(currentTab==='expenses'){c.innerHTML=renderExpenses();setTimeout(loadExpenses,100);}
   else if(currentTab==='timeoff') c.innerHTML=renderTimeOff();
   else if(currentTab==='chat') c.innerHTML=renderChat();
+  else if(currentTab==='tips') c.innerHTML=renderTips();
 }
 
 // DASHBOARD
@@ -532,7 +605,8 @@ window.showBizDetail = function(bizId){
   <div class="detail-header">
     <button class="back-btn" onclick="showTab('businesses')">← Back</button>
     <div class="detail-avatar ${getColor(i)}">${icons[b.type]||'🏢'}</div>
-    <div><div class="detail-name">${b.name}</div><div class="detail-sub">${b.type.toUpperCase()}</div></div>
+    <div style="flex:1"><div class="detail-name">${b.name}</div><div class="detail-sub">${b.type.toUpperCase()}</div></div>
+    <button class="add-btn" onclick="openEditBiz('${b.id}')">✏️ Edit</button>
   </div>
   <div class="card">
     <div class="card-title" style="margin-bottom:14px">Corporate Info</div>
@@ -917,6 +991,200 @@ window.showTab=function(tab){
   if(tab==='timeoff') setTimeout(loadTimeOff,100);
 };
 
+
+// ── EXPENSES ──
+function renderExpenses(){
+  const bizOptions=`<option value="all">All Businesses</option>`+businesses.map(b=>`<option value="${b.id}">${b.name}</option>`).join('');
+  return `
+  <div class="section-header"><div class="section-title">Expenses</div><button class="add-btn" onclick="openExpenseModal()">+ Log</button></div>
+  <div style="margin-bottom:16px"><select onchange="filterExpByBiz(this.value)" id="exp-filter" style="max-width:280px">${bizOptions}</select></div>
+  <div id="exp-list"><div class="loader">Loading...</div></div>`;
+}
+
+let expBizFilter='all';
+window.filterExpByBiz=function(v){expBizFilter=v;loadExpenses();};
+window.openExpenseModal=function(){
+  const sel=document.getElementById('exp-biz');
+  sel.innerHTML=businesses.map(b=>`<option value="${b.id}">${b.name}</option>`).join('');
+  document.getElementById('exp-date').value=new Date().toISOString().split('T')[0];
+  openModal('modal-expense');
+};
+window.saveExpense=async function(){
+  const amount=document.getElementById('exp-amount').value;
+  const bizId=document.getElementById('exp-biz').value;
+  if(!amount||!bizId){alert('Business and amount required');return;}
+  const exp={
+    bizId,
+    category:document.getElementById('exp-cat').value,
+    amount:parseFloat(amount),
+    date:document.getElementById('exp-date').value,
+    desc:document.getElementById('exp-desc').value.trim(),
+    payee:document.getElementById('exp-payee').value.trim(),
+    createdAt:serverTimestamp()
+  };
+  await addDoc(collection(db,'expenses'),exp);
+  closeModal('modal-expense');
+  ['exp-amount','exp-desc','exp-payee'].forEach(id=>document.getElementById(id).value='');
+  loadExpenses();
+};
+
+async function loadExpenses(){
+  const list=document.getElementById('exp-list');
+  if(!list)return;
+  const snap=await getDocs(query(collection(db,'expenses'),orderBy('date','desc')));
+  let exps=snap.docs.map(d=>({id:d.id,...d.data()}));
+  if(expBizFilter!=='all') exps=exps.filter(e=>e.bizId===expBizFilter);
+  const catLabels={'property-tax':'Property Tax','management-fee':'Mgmt Fee','insurance':'Insurance','utilities':'Utilities','maintenance':'Maintenance','supplies':'Supplies','payroll':'Payroll','rent':'Rent/Lease','franchise-fee':'Franchise Fee','professional':'Professional Fees','marketing':'Marketing','equipment':'Equipment','other':'Other'};
+  const total=exps.reduce((s,e)=>s+e.amount,0);
+  if(exps.length===0){list.innerHTML='<div class="empty"><div class="empty-icon">💰</div><p>No expenses logged yet</p></div>';return;}
+  list.innerHTML=`
+  <div class="card" style="margin-bottom:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <span style="color:var(--text2);font-size:13px">${exps.length} expenses</span>
+      <span style="font-size:22px;font-weight:800;color:var(--danger)">-$${total.toFixed(2)}</span>
+    </div>
+  </div>
+  `+exps.map(e=>{
+    const biz=businesses.find(b=>b.id===e.bizId);
+    return `<div class="card" style="padding:14px 16px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div style="font-weight:700;font-size:14px">${catLabels[e.category]||e.category}</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:3px">${biz?biz.name:''}${e.payee?' · '+e.payee:''}${e.desc?' — '+e.desc:''}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:3px">${e.date||''}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:16px;font-weight:800;color:var(--danger)">-$${e.amount.toFixed(2)}</span>
+          <button onclick="deleteExpense('${e.id}')" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px">✕</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+window.deleteExpense=async function(id){
+  if(!confirm('Delete this expense?'))return;
+  await deleteDoc(doc(db,'expenses',id));
+  loadExpenses();
+};
+
+// ── EDIT BUSINESS ──
+window.openEditBiz=function(bizId){
+  const b=businesses.find(x=>x.id===bizId);if(!b)return;
+  document.getElementById('edit-biz-id').value=bizId;
+  document.getElementById('edit-biz-name').value=b.name||'';
+  document.getElementById('edit-biz-type').value=b.type||'llc';
+  document.getElementById('edit-biz-ein').value=b.ein||'';
+  document.getElementById('edit-biz-state').value=b.state||'';
+  document.getElementById('edit-biz-address').value=b.address||'';
+  document.getElementById('edit-biz-franchisor').value=b.franchisor||'';
+  document.getElementById('edit-biz-owner').value=b.owner||'';
+  document.getElementById('edit-biz-notes').value=b.notes||'';
+  openModal('modal-edit-biz');
+};
+window.updateBusiness=async function(){
+  const id=document.getElementById('edit-biz-id').value;
+  const updates={
+    name:document.getElementById('edit-biz-name').value.trim(),
+    type:document.getElementById('edit-biz-type').value,
+    ein:document.getElementById('edit-biz-ein').value.trim(),
+    state:document.getElementById('edit-biz-state').value.trim(),
+    address:document.getElementById('edit-biz-address').value.trim(),
+    franchisor:document.getElementById('edit-biz-franchisor').value.trim(),
+    owner:document.getElementById('edit-biz-owner').value.trim(),
+    notes:document.getElementById('edit-biz-notes').value.trim()
+  };
+  await updateDoc(doc(db,'businesses',id),updates);
+  const idx=businesses.findIndex(b=>b.id===id);
+  if(idx>-1) businesses[idx]={...businesses[idx],...updates};
+  closeModal('modal-edit-biz');
+  render();
+};
+
+// ── TIPS ──
+function renderTips(){
+  return `
+  <div class="section-title" style="margin-bottom:20px">Tips & Help ❓</div>
+
+  <div class="card"><div class="card-title" style="margin-bottom:12px">🏢 Adding a Business</div>
+  <ul style="font-size:13px;color:var(--text2);line-height:2;padding-left:18px">
+    <li>Go to <b>Businesses → + Add</b></li>
+    <li>Even businesses with no employees belong here — rentals, real estate, holding entities</li>
+    <li>Add EIN as soon as you have it — your CPA will thank you</li>
+    <li>Use Notes for anything that doesn't fit a field (e.g. "managed by XYZ Property Co.")</li>
+    <li>Hit the ✏️ edit button on any business card to update info anytime</li>
+  </ul></div>
+
+  <div class="card"><div class="card-title" style="margin-bottom:12px">👤 Adding Employees</div>
+  <ul style="font-size:13px;color:var(--text2);line-height:2;padding-left:18px">
+    <li>Go to <b>Employees → + Add</b> and select which business they belong to</li>
+    <li>Enter both primary and secondary phone — useful for emergencies</li>
+    <li>Set hourly rate here so payroll auto-calculates</li>
+    <li>Mark inactive instead of deleting — keeps history clean</li>
+    <li>Part-Time is its own status — helps when filtering schedules</li>
+  </ul></div>
+
+  <div class="card"><div class="card-title" style="margin-bottom:12px">📅 Scheduling</div>
+  <ul style="font-size:13px;color:var(--text2);line-height:2;padding-left:18px">
+    <li>Select the business first, then set the week</li>
+    <li>Tap any <b>+</b> cell to set a shift for that employee on that day</li>
+    <li>Tap an existing shift to edit or clear it</li>
+    <li>For AM/PM double shifts — set start/end for one, clear it, add the second (split shift support coming)</li>
+    <li>Shifts save to Firebase instantly — employees see it live</li>
+  </ul></div>
+
+  <div class="card"><div class="card-title" style="margin-bottom:12px">💵 Payroll</div>
+  <ul style="font-size:13px;color:var(--text2);line-height:2;padding-left:18px">
+    <li>Enter hours per employee for the pay period</li>
+    <li>Gross pay calculates automatically using the rate on their profile</li>
+    <li>Hours over 40 are flagged in orange — overtime applies at 1.5x</li>
+    <li>Screenshot or share the summary with your CPA at end of period</li>
+    <li>This does NOT submit payroll — your CPA does the actual processing</li>
+  </ul></div>
+
+  <div class="card"><div class="card-title" style="margin-bottom:12px">💰 Expenses</div>
+  <ul style="font-size:13px;color:var(--text2);line-height:2;padding-left:18px">
+    <li>Log every business expense here — property tax, management fees, supplies, rent</li>
+    <li>Filter by business to see expenses per entity</li>
+    <li>Works for businesses with zero employees — rentals, real estate</li>
+    <li>Your CPA can use this as a clean expense log per entity</li>
+    <li>Always add the payee name — makes tax time faster</li>
+  </ul></div>
+
+  <div class="card"><div class="card-title" style="margin-bottom:12px">📆 Time Off</div>
+  <ul style="font-size:13px;color:var(--text2);line-height:2;padding-left:18px">
+    <li><b>2-week advance notice is enforced</b> — requests under 14 days are flagged automatically</li>
+    <li>You approve or deny with one tap</li>
+    <li>Denied requests are removed; approved ones are logged</li>
+    <li>Employees submit requests through this same app once they have login access</li>
+  </ul></div>
+
+  <div class="card"><div class="card-title" style="margin-bottom:12px">💬 Chat</div>
+  <ul style="font-size:13px;color:var(--text2);line-height:2;padding-left:18px">
+    <li>General channel is for all staff across all businesses</li>
+    <li>Each business has its own channel — select from the dropdown</li>
+    <li>Messages are real-time via Firebase</li>
+    <li>Use announcements for schedule changes, policy updates, reminders</li>
+  </ul></div>
+
+  <div class="card"><div class="card-title" style="margin-bottom:12px">🔐 Adding a New User (Employee Access)</div>
+  <ul style="font-size:13px;color:var(--text2);line-height:2;padding-left:18px">
+    <li>Go to <b>firebase.google.com → prit-business-op → Authentication → Users → Add User</b></li>
+    <li>Create an email + password for each employee</li>
+    <li>Share the app URL and their credentials with them directly</li>
+    <li>Currently all logged-in users can see everything — role-based access (manager vs employee view) coming in Phase 2</li>
+  </ul></div>
+
+  <div class="card"><div class="card-title" style="margin-bottom:12px">📱 Save to Home Screen</div>
+  <ul style="font-size:13px;color:var(--text2);line-height:2;padding-left:18px">
+    <li><b>iPhone:</b> Open in Safari → Share button → Add to Home Screen</li>
+    <li><b>Android:</b> Open in Chrome → three dots menu → Add to Home Screen</li>
+    <li>Works like an app — full screen, no browser bar</li>
+    <li>Share the URL with employees and have them do the same</li>
+  </ul></div>`;
+}
+
+// ── PATCH showTab to load async data for new tabs ──
+
 // Seed UPS Store if empty
 if(businesses.length===0){
   const ref=await addDoc(collection(db,'businesses'),{
@@ -931,12 +1199,12 @@ if(businesses.length===0){
 
   // Seed Father's Rentals
   const ref2=await addDoc(collection(db,'businesses'),{
-    name:"Father's Rental Properties",type:'rental',
+    name:"Pravin Rental's",type:'rental',
     ein:'',state:'IL',address:'',
     owner:"Prit (Manager)",notes:'Managed by Prit. Management company handles day-to-day. No employees.',
     createdAt:serverTimestamp()
   });
-  businesses.push({id:ref2.id,name:"Father's Rental Properties",type:'rental',state:'IL',owner:'Prit (Manager)'});
+  businesses.push({id:ref2.id,name:"Pravin Rental's",type:'rental',state:'IL',owner:'Prit (Manager)'});
 
   // Seed Real Estate placeholder
   const ref3=await addDoc(collection(db,'businesses'),{
