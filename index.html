@@ -477,7 +477,7 @@ function gc(i){return COLORS[i%COLORS.length];}
 function ini(n){if(!n)return'?';return n.split(' ').map(w=>w[0]||'').join('').toUpperCase().slice(0,2);}
 function fmt12(t){if(!t)return'';let[h,m]=t.split(':');h=parseInt(h);let ap=h>=12?'PM':'AM';h=h%12||12;return`${h}:${m}${ap}`;}
 function fmtD(d){if(!d)return'—';return new Date(d+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});}
-function getWeekDates(off=0){const n=new Date(),day=n.getDay(),mon=new Date(n);mon.setDate(n.getDate()-day+(off*7));return Array.from({length:7},(_,i)=>{const d=new Date(mon);d.setDate(mon.getDate()+i);return d;});}
+function getWeekDates(off=0){const n=new Date(),day=n.getDay(),mon=new Date(n);mon.setDate(n.getDate()-(day===0?6:day-1)+(off*7));return Array.from({length:7},(_,i)=>{const d=new Date(mon);d.setDate(mon.getDate()+i);return d;});}
 function toMins(t){if(!t)return 0;const[h,m]=t.split(':');return parseInt(h)*60+parseInt(m);}
 function shiftHrs(s,e){const d=toMins(e)-toMins(s);return d>0?d/60:0;}
 function confirm2(title,msg,cb){document.getElementById('confirm-title').textContent=title;document.getElementById('confirm-msg').textContent=msg;document.getElementById('confirm-ok').onclick=()=>{closeModal('modal-confirm');cb();};openModal('modal-confirm');}
@@ -759,7 +759,8 @@ window.deleteEmp=function(id,name){confirm2('Remove Employee',`Remove ${name}?`,
 function rSchedule(){
   const dates=getWeekDates(weekOffset);
   const wl=`${dates[0].toLocaleDateString('en-US',{month:'short',day:'numeric'})} – ${dates[6].toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}`;
-  const schedBiz=bizFilter==='all'&&businesses.length>0?businesses[0].id:bizFilter==='all'?'':bizFilter;
+  // Always default to first business if filter is 'all'
+  const schedBiz=bizFilter==='all'&&businesses.length>0?businesses[0].id:bizFilter!=='all'?bizFilter:businesses[0]?.id||'';
   const biz=businesses.find(b=>b.id===schedBiz);
   const bizOpts=businesses.map(b=>`<option value="${b.id}" ${b.id===schedBiz?'selected':''}>${b.name}</option>`).join('');
   const schedEmps=employees.filter(e=>e.bizId===schedBiz&&e.status!=='inactive');
@@ -776,12 +777,13 @@ function rSchedule(){
     </div>
     <div class="labor-badge">Labor: $${laborCost.toFixed(2)}</div>
   </div>
+  ${schedEmps.length>0?`<p style="font-size:12px;color:var(--text2);margin-bottom:10px">Tap <b>AM +</b> or <b>PM +</b> in any cell to assign a shift. Tap a filled shift to edit or clear it. Hit 📢 Publish when done.</p>`:''}
   <div class="schedule-wrap"><table class="sched-table">
     <thead><tr>
       <th class="emp-col">Employee</th>
       ${dates.map((d,i)=>`<th>${DAYS_SHORT[d.getDay()]}<br><span style="font-weight:400;color:var(--text3)">${d.getDate()}</span>${biz&&biz.hours&&!biz.hours[DAYS_KEY[d.getDay()]]?'<br><span style="font-size:9px;color:var(--danger)">Closed</span>':''}</th>`).join('')}
     </tr></thead>
-    <tbody>${schedEmps.length===0?`<tr><td colspan="8" style="padding:24px;text-align:center;color:var(--text2)">No active employees. Add employees first.</td></tr>`:
+    <tbody>${schedEmps.length===0?`<tr><td colspan="8" style="padding:30px;text-align:center"><div style="color:var(--text2);margin-bottom:12px;font-size:14px">No active employees for this business.</div><button class="add-btn" style="margin:0 auto;display:inline-flex" onclick="openEmpModal(schedBiz)">+ Add Employee to This Business</button></td></tr>`:
     schedEmps.map(e=>`<tr>
       <td class="emp-cell"><div class="emp-cell-name">${e.first}<br>${e.last}</div><div class="emp-cell-rate">$${e.rate||0}/hr</div></td>
       ${dates.map(d=>{
@@ -1183,14 +1185,15 @@ window.openAvailModal=async function(empId,name){
 };
 function renderAvailDays(){
   const grid=document.getElementById('avail-days');
-  grid.innerHTML=DAYS_KEY.map(dk=>{
+  const availOrder=['mon','tue','wed','thu','fri','sat','sun'];
+  grid.innerHTML=availOrder.map(dk=>{
     const a=availState[dk];const on=a&&a.on!==false;
     return`<div class="avail-day ${on?'on':'off'}" onclick="toggleAvailDay('${dk}')">
       <div class="avail-day-label">${dk.slice(0,2).toUpperCase()}</div>
       <div class="avail-day-icon">${on?'✅':'❌'}</div>
     </div>`;
   }).join('');
-  document.getElementById('avail-times').innerHTML=DAYS_KEY.filter(dk=>availState[dk]&&availState[dk].on!==false).map(dk=>{
+  document.getElementById('avail-times').innerHTML=availOrder.filter(dk=>availState[dk]&&availState[dk].on!==false).map(dk=>{
     const a=availState[dk]||{};
     return`<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
       <span style="width:36px;font-size:12px;font-weight:600;color:var(--text2)">${dk.charAt(0).toUpperCase()+dk.slice(1)}</span>
