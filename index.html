@@ -769,7 +769,7 @@ function rSchedule(){
     <button class="add-btn" onclick="publishSchedule('${schedBiz}')">📢 Publish</button>
   </div>
   <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
-    <select onchange="setBizFilter(this.value);render()" style="max-width:220px">${bizOpts}</select>
+    <select onchange="setBizFilter(this.value)" style="max-width:220px">${bizOpts}</select>
     <div class="week-nav">
       <button class="week-btn" onclick="changeWeek(-1)">← Prev</button>
       <span style="font-size:13px;font-weight:600;padding:0 4px">${wl}</span>
@@ -866,7 +866,7 @@ function rPayroll(){
   const opts=`<option value="all">All Businesses</option>`+businesses.map(b=>`<option value="${b.id}" ${bizFilter===b.id?'selected':''}>${b.name}</option>`).join('');
   const emps=(bizFilter==='all'?employees:employees.filter(e=>e.bizId===bizFilter)).filter(e=>e.status!=='inactive');
   return`<div class="section-header"><div class="section-title">Payroll</div></div>
-  <div style="margin-bottom:14px"><select onchange="setBizFilter(this.value);render()" style="max-width:280px">${opts}</select></div>
+  <div style="margin-bottom:14px"><select onchange="setBizFilter(this.value)" style="max-width:280px">${opts}</select></div>
   <div class="card">
     <div style="font-weight:700;margin-bottom:4px">Pay Period Calculator</div>
     <p style="font-size:12px;color:var(--text2);margin-bottom:14px">Enter hours per employee. Overtime auto-applies at 40hrs (1.5x).</p>
@@ -918,7 +918,7 @@ window.exportPayroll=function(){
 function rExpenses(){
   const opts=`<option value="all">All Businesses</option>`+businesses.map(b=>`<option value="${b.id}">${b.name}</option>`).join('');
   return`<div class="section-header"><div class="section-title">Expenses</div><button class="add-btn" onclick="openExpModal()">+ Log</button></div>
-  <div style="margin-bottom:14px"><select onchange="expFilter=this.value;loadExpList()" id="exp-f" style="max-width:280px">${opts}</select></div>
+  <div style="margin-bottom:14px"><select onchange="setExpFilter(this.value)" id="exp-f" style="max-width:280px">${opts}</select></div>
   <div id="exp-list"><div class="loader">Loading...</div></div>`;
 }
 
@@ -1093,6 +1093,11 @@ function rAdminPanel(){
       <button class="btn-sm btn-danger" onclick="nukeAndReseed()">🔄 Reset & Reseed (3 clean businesses)</button>
     </div>
     <p style="font-size:11px;color:var(--text3);margin-top:8px">Use "Remove Duplicates" first. Use "Reset & Reseed" only if you want to start completely fresh.</p>
+    <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+      <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:8px">TESTING TOOLS</div>
+      <button class="edit-btn" onclick="seedTestData()">🧪 Seed Test Employees &amp; Data</button>
+      <p style="font-size:11px;color:var(--text3);margin-top:6px">Adds Summer, Amy &amp; Jenna to UPS Store with shifts, expense &amp; time off. Run after Reset &amp; Reseed.</p>
+    </div>
   </div>
 
   <div class="admin-section">
@@ -1476,10 +1481,87 @@ window.nukeAndReseed = async function(){
     businesses.push({id:ref.id,...s});
   }
   
-  alert('Done! 3 clean businesses created: UPS Store #8181, Pravin Rental\'s, Real Estate (Upcoming).');
+  // Reload employees too
+  const empSnap = await getDocs(collection(db,'employees'));
+  employees = empSnap.docs.map(d=>({id:d.id,...d.data()}));
+  alert('Done! 3 clean businesses created: UPS Store #8181, Pravin Rental\'s, Real Estate (Upcoming).\n\nNow go to Employees → + Add to add your staff.');
   render();
 };
 
+
+// ── TEST DATA SEEDER ──
+window.seedTestData = async function(){
+  const ups = businesses.find(b=>b.name&&b.name.includes('8181'));
+  if(!ups){alert('Run "Reset & Reseed" first to create UPS Store #8181');return;}
+  if(!confirm('Add 3 test employees (Summer, Amy, Jenna) + sample shifts + expense to UPS Store #8181?')) return;
+
+  // Add employees
+  const empData = [
+    {bizId:ups.id,first:'Summer',last:'Brown',role:'Store Associate',phone:'615-934-7458',phone2:'615-351-0085',rate:'12.00',hireDate:'2026-05-07',status:'active',pin:'1234'},
+    {bizId:ups.id,first:'Amy',last:'Flair',role:'Store Associate',phone:'615-300-2957',phone2:'615-400-5228',rate:'13.00',hireDate:'2026-05-07',status:'part-time',pin:'5678'},
+    {bizId:ups.id,first:'Jenna',last:'Lawhorn',role:'Store Associate',phone:'615-739-3445',phone2:'615-308-0112',rate:'12.50',hireDate:'2026-05-07',status:'active',pin:'9999'},
+  ];
+
+  const addedEmps = [];
+  for(const e of empData){
+    const existing = employees.find(x=>x.first===e.first&&x.last===e.last&&x.bizId===ups.id);
+    if(existing){addedEmps.push(existing);continue;}
+    const ref = await addDoc(collection(db,'employees'),{...e,createdAt:serverTimestamp()});
+    const newEmp = {id:ref.id,...e};
+    employees.push(newEmp);
+    addedEmps.push(newEmp);
+  }
+
+  // Add shifts for this week
+  const dates = getWeekDates(0);
+  const shiftPairs = [
+    {slot:'am',s:'08:00',e:'13:00'},
+    {slot:'pm',s:'13:00',e:'19:30'},
+  ];
+
+  for(let di=1;di<=5;di++){ // Mon-Fri
+    const d = dates[di];
+    const ds = d.toISOString().split('T')[0];
+    for(let ei=0;ei<addedEmps.length;ei++){
+      const emp = addedEmps[ei];
+      const slotPair = shiftPairs[ei%2===0?0:1];
+      const k = `${emp.id}_${ds}_${slotPair.slot}`;
+      if(!window._shifts[k]){
+        const sh = {empId:emp.id,date:ds,slot:slotPair.slot,s:slotPair.s,e:slotPair.e,n:''};
+        window._shifts[k] = sh;
+        await setDoc(doc(db,'shifts',k),sh);
+      }
+    }
+  }
+
+  // Add test expense
+  await addDoc(collection(db,'expenses'),{
+    bizId:ups.id,category:'supplies',amount:47.50,
+    date:'2026-06-20',payee:'Bunzl',desc:'Bubble wrap and boxes',
+    createdAt:serverTimestamp()
+  });
+
+  // Add test time off request (future date)
+  await addDoc(collection(db,'timeoff'),{
+    empId:addedEmps[0]?.id||'',
+    empName:'Summer Brown',
+    from:'2026-07-14',to:'2026-07-16',
+    reason:'Vacation',status:'pending',
+    createdAt:serverTimestamp()
+  });
+
+  // Reload shifts
+  const ss = await getDocs(collection(db,'shifts'));
+  window._shifts={};ss.docs.forEach(d2=>{window._shifts[d2.id]={...d2.data()};});
+
+  alert('✅ Test data added!\n\n3 employees:\n• Summer Brown — PIN: 1234\n• Amy Flair — PIN: 5678\n• Jenna Lawhorn — PIN: 9999\n\nCheck: Schedule, Employees, Expenses, Time Off\nTest employee login on Employee Access tab.');
+  render();
+};
+
+window.render=render;
+window.setExpFilter=function(v){expFilter=v;loadExpList();};
+window.loadExpList=loadExpList;
+window.loadTOList=loadTOList;
 window.openModal=function(id){document.getElementById(id).classList.add('open');};
 window.closeModal=function(id){document.getElementById(id).classList.remove('open');};
 
