@@ -953,6 +953,33 @@ window.publishSchedule=async function(bizId){
   alert(`Schedule published for ${biz?biz.name:''}!\nEmployees will see it when they open the app.`);
 };
 
+window.copyScheduleAsText=function(bizId){
+  const biz=businesses.find(b=>b.id===bizId);
+  const dates=getWeekDates(weekOffset);
+  const wl=`${dates[0].toLocaleDateString('en-US',{month:'short',day:'numeric'})} – ${dates[6].toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}`;
+  const schedEmps=employees.filter(e=>e.bizId===bizId&&e.status!=='inactive');
+  const lines=[`📅 Schedule — ${biz?biz.name+' — ':''} ${wl}`,''];
+  for(const e of schedEmps){
+    const parts=[];
+    for(const d of dates){
+      const dk=d.toLocaleDateString('en-US',{weekday:'short'});
+      const dateStr=d.toISOString().split('T')[0];
+      const shAM=window._shifts[`${e.id}_${dateStr}_am`];
+      const shPM=window._shifts[`${e.id}_${dateStr}_pm`];
+      if(shAM||shPM){
+        const slots=[];
+        if(shAM)slots.push(`${fmt12(shAM.s)}–${fmt12(shAM.e)}`);
+        if(shPM)slots.push(`${fmt12(shPM.s)}–${fmt12(shPM.e)}`);
+        parts.push(`${dk}: ${slots.join(' / ')}`);
+      }
+    }
+    if(parts.length)lines.push(`${e.first} ${e.last}: ${parts.join(' | ')}`);
+    else lines.push(`${e.first} ${e.last}: — off`);
+  }
+  if(!schedEmps.length){alert('No employees to copy.');return;}
+  navigator.clipboard.writeText(lines.join('\n')).then(()=>alert('Schedule copied to clipboard!'));
+};
+
 // ── PAYROLL ──
 function rPayroll(){
   const opts=`<option value="all">All Businesses</option>`+businesses.map(b=>`<option value="${b.id}" ${bizFilter===b.id?'selected':''}>${b.name}</option>`).join('');
