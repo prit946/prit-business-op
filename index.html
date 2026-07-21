@@ -1098,7 +1098,7 @@ async function loadTOList(){
       ${showActions?`<div style="display:flex;gap:6px">
         <button class="action-btn approve-btn" onclick="approveTO('${r.id}')">✓ Approve</button>
         <button class="action-btn deny-btn" onclick="denyTO('${r.id}')">✗ Deny</button>
-      </div>`:'<button class="action-btn deny-btn" onclick="denyTO('\''+r.id+'\'')">Remove</button>'}
+      </div>`:`<button class="action-btn deny-btn" onclick="denyTO('${r.id}')">Remove</button>`}
     </div>`;
   }
   list.innerHTML=
