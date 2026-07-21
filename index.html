@@ -1847,8 +1847,8 @@ window.exportAllData=async function(){
     if(e.hireDate)lines.push(`  Hire Date: ${fmtD(e.hireDate)}`);
     lines.push('');
   });
-  navigator.clipboard.writeText(lines.join('
-')).then(()=>alert('✅ Data exported to clipboard!')).catch(()=>prompt('Copy:',lines.join('
+  navigator.clipboard.writeText(lines.join('\n')).then(()=>alert('✅ Data exported to clipboard!')).catch(()=>prompt('Copy:',lines.join('
+
 ')));
 };
 
@@ -1856,8 +1856,8 @@ window.viewPayrollAllBiz=async function(){
   const snap=await getDocs(query(collection(db,'payroll_records'),orderBy('savedAt','desc')));
   const records=snap.docs.map(d=>({id:d.id,...d.data()}));
   if(records.length===0){alert('No payroll records saved yet.');return;}
-  const txt=records.map(r=>`${r.bizName||''}  |  ${r.month} ${r.year}  |  ${fmtD(r.periodStart)} – ${fmtD(r.periodEnd)}  |  Total: $${(r.totalLabor||0).toFixed(2)}`).join('
-');
+  const txt=records.map(r=>`${r.bizName||''}  |  ${r.month} ${r.year}  |  ${fmtD(r.periodStart)} – ${fmtD(r.periodEnd)}  |  Total: $${(r.totalLabor||0).toFixed(2)}`).join('\n');
+
   alert('All Payroll Records:
 
 '+txt);
