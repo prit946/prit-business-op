@@ -207,9 +207,17 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 
     <!-- ADMIN LOGIN -->
     <div id="admin-login">
-      <div class="field"><label>Email</label><input type="email" id="auth-email" placeholder="admin@email.com" autocomplete="email"></div>
-      <div class="field"><label>Password</label><input type="password" id="auth-pass" placeholder="••••••••" autocomplete="current-password"></div>
-      <button class="btn btn-primary" onclick="adminSignIn()">Sign In as Admin</button>
+      <p id="admin-pin-msg" style="color:var(--text2);font-size:13px;text-align:center;margin-bottom:14px">Enter admin PIN</p>
+      <div class="pin-display" id="admin-pd-wrap">
+        <div class="pin-dot" id="apd0"></div><div class="pin-dot" id="apd1"></div>
+        <div class="pin-dot" id="apd2"></div><div class="pin-dot" id="apd3"></div>
+      </div>
+      <div class="pin-pad">
+        <div class="pin-key" onclick="aPinKey('1')">1</div><div class="pin-key" onclick="aPinKey('2')">2</div><div class="pin-key" onclick="aPinKey('3')">3</div>
+        <div class="pin-key" onclick="aPinKey('4')">4</div><div class="pin-key" onclick="aPinKey('5')">5</div><div class="pin-key" onclick="aPinKey('6')">6</div>
+        <div class="pin-key" onclick="aPinKey('7')">7</div><div class="pin-key" onclick="aPinKey('8')">8</div><div class="pin-key" onclick="aPinKey('9')">9</div>
+        <div class="pin-key pin-key-blank"></div><div class="pin-key" onclick="aPinKey('0')">0</div><div class="pin-key pin-key-back" onclick="aPinBack()">⌫</div>
+      </div>
     </div>
 
     <!-- EMPLOYEE LOGIN -->
@@ -551,12 +559,33 @@ window.switchAuthTab=function(tab){
   if(tab==='emp')loadEmpBizList();
 };
 
-window.adminSignIn=async function(){
-  const e=document.getElementById('auth-email').value,p=document.getElementById('auth-pass').value;
+// ── ADMIN PIN AUTH ──
+const PBO_PIN_KEY='pbo_admin_pin';
+let aBuf='';
+function aUpdDots(){for(let i=0;i<4;i++)document.getElementById('apd'+i).classList.toggle('filled',i<aBuf.length);}
+window.aPinKey=function(k){if(aBuf.length>=4)return;aBuf+=k;aUpdDots();if(aBuf.length===4)setTimeout(aCheck,200);};
+window.aPinBack=function(){aBuf=aBuf.slice(0,-1);aUpdDots();};
+function aCheck(){
+  const stored=localStorage.getItem(PBO_PIN_KEY);
+  if(!stored){
+    localStorage.setItem(PBO_PIN_KEY,aBuf);aBuf='';aUpdDots();
+    document.getElementById('admin-pin-msg').textContent='Enter admin PIN';
+    doAdminLogin();return;
+  }
+  if(aBuf===stored){aBuf='';doAdminLogin();}
+  else{document.getElementById('auth-error').textContent='Incorrect PIN';aBuf='';aUpdDots();}
+}
+async function doAdminLogin(){
+  currentUser={email:'admin',uid:'local-admin'};userRole='admin';
   document.getElementById('auth-error').textContent='';
-  try{await signInWithEmailAndPassword(auth,e,p);}
-  catch(x){document.getElementById('auth-error').textContent='Invalid email or password';}
-};
+  try{await loadAll();}catch(e){console.warn('Firestore load failed:',e);}
+  startApp();
+}
+function initAdminPin(){
+  const msg=document.getElementById('admin-pin-msg');
+  if(!localStorage.getItem(PBO_PIN_KEY))msg.textContent='Create admin PIN (4 digits — first time setup)';
+}
+window.adminSignIn=function(){};
 
 async function loadEmpBizList(){
   const sel=document.getElementById('emp-login-biz');
@@ -619,6 +648,7 @@ window.doSignOut=async function(){
   for(let i=0;i<4;i++)document.getElementById('pd'+i).classList.remove('filled');
 };
 
+initAdminPin();
 onAuthStateChanged(auth,async user=>{
   if(user){
     currentUser=user;
