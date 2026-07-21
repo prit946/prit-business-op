@@ -1818,14 +1818,14 @@ window.copyPayrollRecord=async function(id){
 `;
   txt+=`Month: ${r.month} ${r.year}
 `;
-  txt+='─'.repeat(50)+'
-';
+  txt+='─'.repeat(50)+'\n';
+
   (r.employees||[]).forEach(e=>{
     txt+=`${e.name.padEnd(20)} ${String(e.hours+'hrs').padEnd(8)} $${e.rate}/hr   $${e.gross.toFixed(2)}${e.ot?' (OT)':''}
 `;
   });
-  txt+='─'.repeat(50)+'
-';
+  txt+='─'.repeat(50)+'\n';
+
   txt+=`TOTAL LABOR: $${(r.totalLabor||0).toFixed(2)}
 `;
   navigator.clipboard.writeText(txt).then(()=>alert('✅ Payroll copied — paste into email to your CPA.')).catch(()=>prompt('Copy this:',txt));
