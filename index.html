@@ -1227,6 +1227,7 @@ function rAdminPanel(){
       <button class="edit-btn" onclick="exportAllData()">📤 Export All Data</button>
       <button class="edit-btn" onclick="viewPayrollAllBiz()">💵 All Payroll Records</button>
       <button class="edit-btn" onclick="exportPINSheet()">🔑 Copy PIN Sheet</button>
+      <button class="edit-btn" onclick="changeAdminPin()">🔐 Change Admin PIN</button>
     </div>
     <div class="divider"></div>
     <div style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:8px">DANGER ZONE</div>
@@ -2047,6 +2048,21 @@ window.loadExpList=loadExpList;
 window.loadTOList=loadTOList;
 window.openModal=function(id){document.getElementById(id).classList.add('open');};
 window.closeModal=function(id){document.getElementById(id).classList.remove('open');};
+window.openPinModal=function(empId,name){
+  document.getElementById('pin-emp-id').value=empId;
+  document.getElementById('pin-modal-title').textContent='Reset PIN — '+name;
+  document.getElementById('new-pin').value='';
+  openModal('modal-pin');
+};
+window.changeAdminPin=function(){
+  const p=prompt('Enter new 4-digit admin PIN:');
+  if(p===null)return;
+  if(!/^\d{4}$/.test(p)){alert('PIN must be exactly 4 digits');return;}
+  const confirm=prompt('Confirm new PIN:');
+  if(confirm!==p){alert('PINs do not match');return;}
+  localStorage.setItem(PBO_PIN_KEY,p);
+  alert('Admin PIN updated.');
+};
 
 </script>
 </body>
